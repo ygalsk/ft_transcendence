@@ -30,6 +30,10 @@ Thumbs.db
 # Docker volumes (if you mount local folders)
 data/
 
+# Prometheus & Grafana data
+prometheus_data/
+grafana_data/
+
 # Logs
 logs
 *.log
