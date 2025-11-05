@@ -1,8 +1,19 @@
 services:
+  caddy:
+    image: caddy:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+
   backend:
     build: ./backend
-    ports:
-      - "3000:3000"
     volumes:
       - ./backend:/app
       - /app/node_modules
@@ -10,10 +21,12 @@ services:
 
   frontend:
     build: ./frontend
-    ports:
-      - "5173:5173"
     volumes:
       - ./frontend:/app
       - /app/node_modules
     depends_on:
       - backend
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -3,7 +3,7 @@ import Fastify from 'fastify'
 const fastify = Fastify({ logger: true })
 
 // Test route
-fastify.get('/health', async (request, reply) => {
+fastify.get('/api/health', async (request, reply) => {
   return { status: 'ok', message: 'Backend is running!' }
 })
 
