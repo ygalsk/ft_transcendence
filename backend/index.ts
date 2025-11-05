@@ -1,6 +1,14 @@
 import Fastify from 'fastify'
+import metricsPlugin from 'fastify-metrics'
 
 const fastify = Fastify({ logger: true })
+
+// Register Prometheus metrics
+await fastify.register(metricsPlugin, {
+  endpoint: '/metrics',
+  defaultMetrics: { enabled: true },
+  routeMetrics: { enabled: true }
+})
 
 // Test route
 fastify.get('/api/health', async (request, reply) => {
