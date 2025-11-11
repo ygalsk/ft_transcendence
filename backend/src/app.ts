@@ -4,7 +4,7 @@ import db from "./plugins/db";
 import auth from "./plugins/auth";
 import websocket from "./plugins/websocket";
 import userRoutes from "./routes/users";
-// import authRoutes from "./routes/auth";
+import authRoutes from "./routes/auth";
 
 export function buildApp() {
     const app = fastify({ logger: true });
@@ -19,7 +19,7 @@ export function buildApp() {
     app.register(websocket);
 
     app.register(userRoutes, { prefix: "/users" });
-    // app.register(authRoutes, { prefix: "/auth" });
+    app.register(authRoutes, { prefix: "/auth" });
 
     app.get("/health", async () => {
         return { status : "ok", message: "Server healthy!" };

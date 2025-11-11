@@ -8,7 +8,7 @@ export default fp(async (fastify) => {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           username TEXT UNIQUE NOT NULL,
           email TEXT UNIQUE NOT NULL,
-          avatar TEXT,
+          avatarUrl TEXT,
           oauth_provider TEXT,
           oauth_id TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP

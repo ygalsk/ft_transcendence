@@ -1,5 +1,7 @@
+import dotenv from 'dotenv';
 import { buildApp } from "./src/app";
 
+const env = dotenv.config({ path: '../.env'});
 const app = buildApp();
 
 const start = async () => {
