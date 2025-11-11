@@ -25,11 +25,5 @@ export function buildApp() {
         return { status : "ok", message: "Server healthy!" };
     });
 
-    app.get("/db-test", async () => {
-        // @ts-ignore
-        const result = app.db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
-        return { tables: result };
-    });
-
     return app;
 }
