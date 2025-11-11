@@ -1,6 +1,4 @@
 import { FastifyInstance } from "fastify";
-import { CreateUserSchema, UserSchema, CreateUserType, UserType } from "../../schemas/user.schema";
-import { Type } from "@sinclair/typebox";
 
 export default async function authRoutes(fastify:FastifyInstance) {
     fastify.get('/github', async(req, res) => {
