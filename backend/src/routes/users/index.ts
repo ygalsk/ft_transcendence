@@ -1,8 +1,9 @@
-import { FastifyInstance } from "fastify";
-import { CreateUserSchema, UserSchema, CreateUserType, UserType } from "../../schemas/user.schema";
+import { FastifyPluginAsync } from "fastify";
+import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { Type } from "@sinclair/typebox";
+import { CreateUserSchema, UserSchema, CreateUserType, UserType } from "../../schemas/user.schema";
 
-export default async function userRoutes(fastify:FastifyInstance) {
+export default async function userRoutes(fastify:FastifyInstance<TypeBoxTypeProvider>) {
     fastify.get('/', {
         schema: {
             response: {
@@ -17,7 +18,7 @@ export default async function userRoutes(fastify:FastifyInstance) {
         return { users };
     });
 
-    fastify.get<{ Params: { id: string } }>('/:id', {
+    fastify.get('/:id', {
         schema: {
             params: Type.Object({
                 id: Type.String()
@@ -32,7 +33,7 @@ export default async function userRoutes(fastify:FastifyInstance) {
             }
         }
     }, async (req, res) => {
-        const { id } = req.params;
+        const id = req.params;
         // @ts-ignore
         const user = fastify.db.prepare('SELECT * FROM users WHERE id = ?').get(id);
 
@@ -43,7 +44,7 @@ export default async function userRoutes(fastify:FastifyInstance) {
         return { user };
     });
 
-    fastify.post<{ Body: CreateUserType, Reply: { user: UserType } }>('/', {
+    fastify.post('/', {
         schema: {
             body: CreateUserSchema,
             response: {
@@ -51,6 +52,9 @@ export default async function userRoutes(fastify:FastifyInstance) {
                     user: UserSchema
                 }),
                 409: Type.Object({
+                    error: Type.String()
+                }),
+                500: Type.Object({
                     error: Type.String()
                 })
             }

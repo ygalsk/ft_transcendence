@@ -1,4 +1,6 @@
 import { FastifyInstance } from "fastify";
+import { CreateUserSchema, UserSchema, CreateUserType, UserType } from "../../schemas/user.schema";
+import { Type } from "@sinclair/typebox";
 
 export default async function authRoutes(fastify:FastifyInstance) {
     fastify.get('/github', async(req, res) => {
@@ -17,9 +19,20 @@ export default async function authRoutes(fastify:FastifyInstance) {
         res.redirect(url, 302);
     });
 
-    fastify.get<{ Querystring: { code: string } }>('/github/callback', async(req, res) => {
-
-        const code = req.query.code;
+    fastify.get('/github/callback', {
+        schema: {
+            querystring: Type.Object({
+                code: Type.String({ minLength: 1 })
+            }),
+            response: {
+                200: Type.Object({
+                    success: Type.Boolean(),
+                    user: UserSchema
+                })
+            }
+        }
+    }, async(req, res) => {
+        const code = req.query;
         const client_id = process.env.OAUTH_CLIENT_ID as string;
         const client_secret = process.env.OAUTH_CLIENT_SECRET as string;
 
@@ -48,6 +61,31 @@ export default async function authRoutes(fastify:FastifyInstance) {
 
         const userData = await userResponse.json();
         console.log('User data:', userData); 
+        
+        // @ts-ignore
+        const existingUser = fastify.db.prepare(
+            'SELECT * FROM users WHERE oauth_id = ? AND oauth_provider = ?'
+        ).get(String(userData.id), 'github');
+
+        if (existingUser) {
+            //Update user
+            // @ts-ignore
+            fastify.db.prepare(
+                'UPDATE users SET username = ?, email = ?, avatarUrl = ? WHERE id = ?'
+            ).run(userData.login, userData.email, userData.avatar_url, existingUser.id);
+            return res.send({ success: true, user: existingUser });
+        } else {
+            //create new user
+            // @ts-ignore
+            const result = fastify.db.prepare(
+                'INSERT INTO users (username, email, avatarUrl, oauth_provider, oauth_id) VALUES (?, ?, ?, ?, ?)'
+            ).run(userData.login, userData.email, userData.avatar_url, 'github', String(userData.id));
+            //get new user
+            //@ts-ignore
+            const newUser = fastify.db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
+
+            return res.send({ success: true, user: newUser });
+        }
     });
 
 }

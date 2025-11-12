@@ -7,7 +7,7 @@ export default fp(async (fastify) => {
       CREATE TABLE IF NOT EXISTS users (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           username TEXT UNIQUE NOT NULL,
-          email TEXT UNIQUE NOT NULL,
+          email TEXT,
           avatarUrl TEXT,
           oauth_provider TEXT,
           oauth_id TEXT,

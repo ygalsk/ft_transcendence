@@ -6,6 +6,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@fastify/type-provider-typebox": "^6.1.0",
     "@fastify/websocket": "^11.2.0",
     "@sinclair/typebox": "^0.34.41",
     "better-sqlite3": "^12.4.1",
