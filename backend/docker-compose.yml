@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - DB_PATH=/data/auth.sqlite
+      - JWT_SECRET=${JWT_SECRET:-default-secret-change-in-production}
+      - USER_SERVICE_URL=http://user-service:5000
+    volumes:
+      - auth-data:/data
+    networks:
+      - backend
+
+  user-service:
+    build:
+      context: .
+      dockerfile: services/user/Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - DB_PATH=/data/user.sqlite
+    volumes:
+      - user-data:/data
+    networks:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - backend
+    depends_on:
+      - auth-service
+      - user-service
+
+volumes:
+  auth-data:
+  user-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  backend:
+    driver: bridge

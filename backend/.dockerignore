@@ -5,9 +5,13 @@ dist
 .env
 .env.*
 *.log
+*.sqlite
+*.db
 .DS_Store
 .vscode
 .idea
 README.md
 Dockerfile
 .dockerignore
+docker-compose.yml
+services/*/shared

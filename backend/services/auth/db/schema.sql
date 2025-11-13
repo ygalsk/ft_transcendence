@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  twofa_enabled INTEGER DEFAULT 0,
+  twofa_secret TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);

@@ -1,0 +1,20 @@
+:80 {
+	# Auth service routes
+	handle /api/auth/* {
+		uri strip_prefix /api/auth
+		reverse_proxy auth-service:4000
+	}
+
+	handle /api/user/* {
+		uri strip_prefix /api/user
+		reverse_proxy user-service:5000
+	}
+
+	# Health check
+	respond /health 200 {
+		body "OK"
+	}
+
+	# Default response
+	respond 404
+}
