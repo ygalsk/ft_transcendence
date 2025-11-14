@@ -13,8 +13,5 @@ COPY services/pong/db ./db
 
 RUN npm run build
 
-RUN mkdir -p /usr/src/app/data && chown node:node /usr/src/app/data
-
-USER node
 EXPOSE 6061
 CMD ["npm", "start"]
