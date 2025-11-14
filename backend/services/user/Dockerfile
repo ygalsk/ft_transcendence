@@ -1,21 +1,18 @@
-FROM node:24-slim
+FROM node:24-alpine
 
-WORKDIR /app
+RUN apk add --no-cache python3 make g++
+WORKDIR /usr/src/app
 
-# Copy shared code
-COPY shared ./shared
-
-# Copy this service's files
 COPY services/user/package*.json ./
+RUN npm install
+
+COPY shared ./shared
 COPY services/user/tsconfig.json ./
 COPY services/user/src ./src
 COPY services/user/db ./db
 
-# Install and build
-RUN npm install
-RUN npm rebuild better-sqlite3
 RUN npm run build
 
+USER node
 EXPOSE 5000
-
 CMD ["npm", "start"]

@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const GATEWAY = "http://localhost";
+  const GATEWAY = window.location.origin;
   const CHAT_WS = "ws://localhost:3000/api/chat/ws";
   let JWT = localStorage.getItem("jwt") || "";
 

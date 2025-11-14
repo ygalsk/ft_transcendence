@@ -7,6 +7,8 @@
     "start": "node dist/src/index.js"
   },
   "dependencies": {
+    "@fastify/swagger": "^9.6.1",
+    "@fastify/swagger-ui": "^5.2.3",
     "@fastify/type-provider-typebox": "^5.0.0",
     "@sinclair/typebox": "^0.33.0",
     "axios": "^1.7.9",

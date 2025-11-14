@@ -5,6 +5,7 @@ import { join } from 'path';
 import dbPlugin from '../shared/plugins/db';
 import authPlugin from '../shared/plugins/auth';
 import prometheusPlugin from '../shared/plugins/prometheus';
+import swaggerPlugin from '../shared/plugins/swagger';
 import authRoutes from './routes/auth.routes';
 
 export function buildApp() {
@@ -21,6 +22,12 @@ export function buildApp() {
 
   // Prometheus metrics
   app.register(prometheusPlugin);
+
+  // Swagger
+  app.register(swaggerPlugin, {
+    serviceName: 'Auth Service',
+    serverUrl: '/api/auth'
+  });
 
   // Routes
   app.register(authRoutes);

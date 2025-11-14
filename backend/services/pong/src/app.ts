@@ -4,6 +4,7 @@ import { join } from 'path';
 
 import dbPlugin from '../shared/plugins/db';
 import authPlugin from '../shared/plugins/auth';
+import swaggerPlugin from '../shared/plugins/swagger';
 import prometheusPlugin from '../shared/plugins/prometheus';
 import socketIOPlugin from '../shared/plugins/socketio';
 import pongSocketPlugin from './plugins/pong.socket';
@@ -23,6 +24,12 @@ export function buildApp() {
 
   // Prometheus metrics
   app.register(prometheusPlugin);
+
+  // Swagger
+  app.register(swaggerPlugin, {
+    serviceName: 'Pong Service',
+    serverUrl: '/api/pong'
+  });
 
   // Socket.IO plugin
   app.register(socketIOPlugin, {
