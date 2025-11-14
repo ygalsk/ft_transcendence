@@ -28,7 +28,7 @@
 <script>
 const canvas = document.getElementById("renderCanvas");
 const engine = new BABYLON.Engine(canvas, true);
-const socket = io("http://localhost:6061", { transports: ["websocket"] });
+const socket = io({ transports: ["websocket"] });
 
 let scene, camera, light;
 let leftPaddle, rightPaddle, ball;
