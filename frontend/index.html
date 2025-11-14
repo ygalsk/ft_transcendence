@@ -1,18 +1,76 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>HELLO</title>
-</head>
-<body>
-  <div id="app"></div>
-  <footer style="text-align: center; padding: 20px; margin-top: 20px;">
-    <a href="https://github.com/ygalsk/ft_transcendence/" target="_blank" rel="noopener noreferrer">
-      View on GitHub
-    </a>
-  </footer>
+  <title>FT_Transcendence Backend Tester</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script type="module" src="/src/main.ts"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 font-mono p-6">
+  <h1 class="text-2xl font-bold mb-6 text-cyan-400 text-center">
+    🧩 FT_Transcendence Backend Test Ground
+  </h1>
 
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+    <!-- Auth Section -->
+    <div class="p-4 bg-slate-800 rounded-xl shadow">
+      <h2 class="text-lg font-semibold text-cyan-300 mb-3">🔐 Authentication</h2>
+      <div class="space-y-2">
+        <input id="reg_email" class="w-full p-2 text-black rounded" placeholder="Register Email" />
+        <input id="reg_pass" class="w-full p-2 text-black rounded" type="password" placeholder="Password" />
+        <input id="reg_display" class="w-full p-2 text-black rounded" placeholder="Display Name" />
+        <button id="btn_register" class="w-full bg-cyan-500 py-1.5 rounded hover:bg-cyan-600">Register</button>
+        <pre id="reg_result" class="text-sm bg-slate-700 p-2 rounded h-24 overflow-y-auto"></pre>
+      </div>
+
+      <hr class="my-4 border-slate-600">
+
+      <div class="space-y-2">
+        <input id="login_email" class="w-full p-2 text-black rounded" placeholder="Login Email" />
+        <input id="login_pass" class="w-full p-2 text-black rounded" type="password" placeholder="Password" />
+        <input id="login_2fa" class="w-full p-2 text-black rounded" placeholder="2FA Code (optional)" />
+        <div class="flex gap-2">
+          <button id="btn_login" class="flex-1 bg-green-500 py-1.5 rounded hover:bg-green-600">Login</button>
+          <button id="btn_logout" class="flex-1 bg-red-500 py-1.5 rounded hover:bg-red-600">Logout</button>
+        </div>
+        <pre id="login_result" class="text-sm bg-slate-700 p-2 rounded h-24 overflow-y-auto"></pre>
+      </div>
+    </div>
+
+    <!-- Profile Section -->
+    <div class="p-4 bg-slate-800 rounded-xl shadow">
+      <h2 class="text-lg font-semibold text-cyan-300 mb-3">👤 Profile</h2>
+      <div class="flex gap-2 mb-3">
+        <button id="btn_get_profile" class="flex-1 bg-indigo-500 py-1.5 rounded hover:bg-indigo-600">Get Profile</button>
+        <button id="btn_update_profile" class="flex-1 bg-amber-500 py-1.5 rounded hover:bg-amber-600">Update Profile</button>
+      </div>
+      <input id="update_display" class="w-full p-2 mb-2 text-black rounded" placeholder="New Display Name" />
+      <input id="update_bio" class="w-full p-2 mb-3 text-black rounded" placeholder="New Bio" />
+      <pre id="profile_result" class="text-sm bg-slate-700 p-2 rounded h-40 overflow-y-auto"></pre>
+    </div>
+
+    <!-- 2FA Section -->
+    <div class="p-4 bg-slate-800 rounded-xl shadow">
+      <h2 class="text-lg font-semibold text-cyan-300 mb-3">🔑 Two-Factor Authentication (2FA)</h2>
+      <div class="flex gap-2 mb-3">
+        <button id="btn_2fa_setup" class="flex-1 bg-emerald-500 py-1.5 rounded hover:bg-emerald-600">Setup 2FA</button>
+        <button id="btn_2fa_verify" class="flex-1 bg-pink-500 py-1.5 rounded hover:bg-pink-600">Verify 2FA</button>
+      </div>
+      <div id="qr_area" class="mb-3 text-center"></div>
+      <input id="twofa_code_input" class="w-full p-2 mb-2 text-black rounded" placeholder="Enter 2FA Code" />
+      <pre id="twofa_result" class="text-sm bg-slate-700 p-2 rounded h-32 overflow-y-auto"></pre>
+    </div>
+  </div>
+
+  <!-- Token Display + Play Pong -->
+  <div class="mt-8 bg-slate-800 p-4 rounded-xl shadow text-center">
+    <h2 class="text-lg font-semibold text-cyan-300 mb-2">🪪 JWT Token</h2>
+    <pre id="token_box" class="bg-slate-700 p-2 rounded break-all text-xs h-16 overflow-y-auto mb-4"></pre>
+    <button id="btn_play_pong" class="bg-lime-500 px-4 py-2 rounded hover:bg-lime-600">
+      🎾 Play Pong
+    </button>
+  </div>
 </body>
 </html>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>🏓 Pong 3D (Babylon.js + Socket.IO)</title>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+  <style>
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background-color: #0f172a;
+    }
+    #renderCanvas {
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="renderCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById("renderCanvas");
+const engine = new BABYLON.Engine(canvas, true);
+const socket = io("http://localhost:6061", { transports: ["websocket"] });
+
+let scene, camera, light;
+let leftPaddle, rightPaddle, ball;
+let score = { left: 0, right: 0 };
+
+function createScene() {
+  const scene = new BABYLON.Scene(engine);
+  scene.clearColor = new BABYLON.Color3(0.02, 0.02, 0.05);
+
+  // 🎥 CAMERA – very light angle, feels 2D but slightly deep
+  camera = new BABYLON.FreeCamera("camera", new BABYLON.Vector3(0, 15, -0.1), scene);
+  camera.setTarget(BABYLON.Vector3.Zero());
+
+  // 💡 LIGHTING
+  const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+  light.intensity = 0.9;
+
+  // 🌈 GLOW
+  const glow = new BABYLON.GlowLayer("glow", scene);
+  glow.intensity = 0.5;
+
+  // 🏓 TABLE – thin and wide
+  const table = BABYLON.MeshBuilder.CreateGround("table", { width: 18, height: 10 }, scene);
+  const tableMat = new BABYLON.StandardMaterial("tableMat", scene);
+  tableMat.diffuseColor = new BABYLON.Color3(0.05, 0.1, 0.3);
+  tableMat.specularColor = new BABYLON.Color3(0.2, 0.4, 0.8);
+  table.material = tableMat;
+
+  // ✨ TABLE LINE (center)
+  const centerLine = BABYLON.MeshBuilder.CreateBox("centerLine", { width: 0.05, height: 0.01, depth: 10 }, scene);
+  const lineMat = new BABYLON.StandardMaterial("lineMat", scene);
+  lineMat.emissiveColor = new BABYLON.Color3(0.4, 0.8, 1);
+  centerLine.material = lineMat;
+  centerLine.position.y = 0.01;
+
+  // 🧍 PADDLES
+  const paddleMat = new BABYLON.StandardMaterial("paddleMat", scene);
+  paddleMat.emissiveColor = new BABYLON.Color3(0.1, 0.8, 1);
+
+  leftPaddle = BABYLON.MeshBuilder.CreateBox("leftPaddle", { width: 0.5, height: 0.3, depth: 1.8 }, scene);
+  rightPaddle = leftPaddle.clone("rightPaddle");
+  leftPaddle.material = paddleMat;
+  rightPaddle.material = paddleMat;
+  leftPaddle.position.x = -8;
+  rightPaddle.position.x = 8;
+  leftPaddle.position.y = rightPaddle.position.y = 0.15;
+
+  // ⚪ BALL
+  ball = BABYLON.MeshBuilder.CreateSphere("ball", { diameter: 0.4 }, scene);
+  const ballMat = new BABYLON.StandardMaterial("ballMat", scene);
+  ballMat.emissiveColor = new BABYLON.Color3(1, 0.9, 0.3);
+  ball.material = ballMat;
+  ball.position.y = 0.2;
+
+  // 🧾 SCOREBOARD (simple 2D overlay)
+  const plane = BABYLON.MeshBuilder.CreatePlane("scorePlane", { size: 4 }, scene);
+  plane.position.set(0, 7, 0);
+  const texture = BABYLON.GUI.AdvancedDynamicTexture.CreateForMesh(plane);
+  const text = new BABYLON.GUI.TextBlock();
+  text.text = "0 : 0";
+  text.color = "white";
+  text.fontSize = 150;
+  texture.addControl(text);
+  scene.scoreText = text;
+
+  return scene;
+}
+
+scene = createScene();
+engine.runRenderLoop(() => scene.render());
+
+// 🧠 SOCKET.IO EVENTS
+socket.on("connect", () => console.log("🟢 Connected"));
+socket.on("waiting", (msg) => console.log("⏳ Waiting:", msg.message));
+socket.on("match_start", (msg) => console.log("🏁 Match start", msg));
+
+socket.on("state", (data) => {
+  const { ball: b, paddles, score: s } = data;
+  score = s;
+  scene.scoreText.text = `${s.left} : ${s.right}`;
+
+  // Map server coordinates → table
+  ball.position.x = (b.x - 640) / 64;
+  ball.position.z = (b.y - 250) / 25;
+  leftPaddle.position.z = (paddles.left - 250) / 25;
+  rightPaddle.position.z = (paddles.right - 250) / 25;
+});
+
+socket.on("match_end", (msg) => {
+  scene.scoreText.text = `🏁 ${msg.winner} Wins!`;
+});
+
+socket.on("disconnect", () => console.log("🔴 Disconnected"));
+
+// 🎮 CONTROLS
+window.addEventListener("keydown", (e) => {
+  let step = 15;
+  if (e.key === "ArrowUp") socket.emit("move", { y: -step });
+  if (e.key === "ArrowDown") socket.emit("move", { y: step });
+});
+
+window.addEventListener("resize", () => engine.resize());
+</script>
+
+
+</body>
+</html>

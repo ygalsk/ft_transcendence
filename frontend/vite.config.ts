@@ -1,15 +1,21 @@
 import { defineConfig } from 'vite'
-import tailwindcss from '@tailwindcss/vite'
+import react from '@vitejs/plugin-react'
 
+// Proxy API calls to backend gateway
 export default defineConfig({
-  plugins: [tailwindcss()],
+  plugins: [react()],
   server: {
-    host: '0.0.0.0',  // Important for Docker!
     port: 5173,
-    strictPort: true,
-    allowedHosts: [
-      'localhost',
-      'transcendence.keystone-gateway.dev'
-    ]
+    proxy: {
+      '/api': 'http://localhost:3000'
+    }
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        main: '/index.html',
+        pong: '/pong.html'
+      }
+    }
   }
 })

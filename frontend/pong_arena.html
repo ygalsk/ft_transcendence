@@ -1,0 +1,158 @@
+<!-- frontend-pong/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Pong (Socket.IO, 2D)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Tailwind (ok for dev; swap to CLI in prod) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Socket.IO client served by the pong-service -->
+  <script src="http://localhost:6061/socket.io/socket.io.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100">
+  <div class="max-w-4xl mx-auto p-4">
+    <h1 class="text-2xl font-bold text-cyan-400 mb-4">Pong (Authoritative 2D)</h1>
+
+    <div class="flex gap-4 items-start">
+      <div class="grow">
+        <canvas id="game" class="bg-slate-800 rounded w-full" width="960" height="540"></canvas>
+      </div>
+      <div class="w-64 space-y-3">
+        <div class="p-3 bg-slate-800 rounded">
+          <div class="text-sm text-cyan-300 font-semibold">Status</div>
+          <pre id="status" class="text-xs mt-2 whitespace-pre-wrap"></pre>
+        </div>
+        <button id="btnQueue"
+          class="w-full bg-cyan-500 hover:bg-cyan-600 active:bg-cyan-700 text-black font-semibold py-2 rounded">
+          Join Matchmaking
+        </button>
+        <div class="p-3 bg-slate-800 rounded text-xs leading-6">
+          <div class="font-semibold text-cyan-300 mb-1">Controls</div>
+          <div><span class="text-white/80">Left player:</span> W / S</div>
+          <div><span class="text-white/80">Right player:</span> ↑ / ↓</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    const canvas = /** @type {HTMLCanvasElement} */(document.getElementById("game"));
+    const ctx = canvas.getContext("2d");
+    const statusBox = document.getElementById("status");
+    const btnQueue = document.getElementById("btnQueue");
+
+    const socket = io("http://localhost:6061", { transports: ["websocket"] });
+
+    let mySide /** @type {"left"|"right"|null} */ = null;
+    let lastState = null;
+
+    function setStatus(s) {
+      statusBox.textContent = s;
+    }
+
+    function draw(state) {
+      const { width, height } = canvas;
+      ctx.clearRect(0, 0, width, height);
+
+      // background
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(0, 0, width, height);
+
+      // center line
+      ctx.strokeStyle = "rgba(255,255,255,0.2)";
+      ctx.setLineDash([8, 12]);
+      ctx.beginPath();
+      ctx.moveTo(width/2, 0);
+      ctx.lineTo(width/2, height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // ball
+      ctx.fillStyle = "#eab308"; // amber
+      ctx.beginPath();
+      ctx.arc(state.ball.x, state.ball.y, state.ball.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // paddles
+      ctx.fillStyle = "#38bdf8"; // cyan
+      ctx.fillRect(12, state.paddles.left, 12, state.paddleH);
+      ctx.fillRect(width - 24, state.paddles.right, 12, state.paddleH);
+
+      // score
+      ctx.font = "24px ui-monospace, monospace";
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(String(state.score.left), width/2 - 40, 40);
+      ctx.fillText(String(state.score.right), width/2 + 24, 40);
+
+      // side label
+      if (mySide) {
+        ctx.font = "14px ui-monospace, monospace";
+        ctx.fillStyle = "#67e8f9";
+        ctx.fillText(`You: ${mySide.toUpperCase()}`, 16, height - 16);
+      }
+    }
+
+    // INPUT → server
+    let keyDir = 0; // -1,0,1
+    function sendInput() {
+      socket.emit("paddle", { dir: keyDir, speed: 9 });
+    }
+    setInterval(() => {
+      if (mySide) sendInput();
+    }, 50); // 20/s input sends (lightweight)
+
+    window.addEventListener("keydown", (e) => {
+      if (mySide === "left") {
+        if (e.key === "w" || e.key === "W") keyDir = -1;
+        if (e.key === "s" || e.key === "S") keyDir = 1;
+      } else if (mySide === "right") {
+        if (e.key === "ArrowUp") keyDir = -1;
+        if (e.key === "ArrowDown") keyDir = 1;
+      }
+    });
+    window.addEventListener("keyup", (e) => {
+      if (mySide === "left") {
+        if (e.key === "w" || e.key === "W") keyDir = 0;
+        if (e.key === "s" || e.key === "S") keyDir = 0;
+      } else if (mySide === "right") {
+        if (e.key === "ArrowUp") keyDir = 0;
+        if (e.key === "ArrowDown") keyDir = 0;
+      }
+    });
+
+    // UI: matchmaking
+    btnQueue.addEventListener("click", () => {
+      socket.emit("join_queue");
+      setStatus("Joining queue…");
+    });
+
+    // SOCKET EVENTS
+    socket.on("connect", () => setStatus("Connected. Click “Join Matchmaking”."));
+    socket.on("system", (msg) => setStatus(String(msg)));
+
+    socket.on("match_start", (payload) => {
+      // payload.you = { [socketId]: "left" | "right" }
+      mySide = payload.you[socket.id] ?? null;
+      setStatus(`Match start! You are ${mySide?.toUpperCase()}.`);
+    });
+
+    socket.on("state", (st) => {
+      lastState = st;
+      draw({
+        width: canvas.width,
+        height: canvas.height,
+        paddleH: 80,
+        paddleW: 12,
+        ...st,
+      });
+    });
+
+    socket.on("game_over", ({ score, winner, reason }) => {
+      setStatus(`Game over — Winner: ${winner.toUpperCase()}  (${score.left} - ${score.right})` + (reason ? ` [${reason}]` : ""));
+    });
+
+    socket.on("disconnect", () => setStatus("Disconnected."));
+  </script>
+</body>
+</html>

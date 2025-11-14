@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'auth-service'
+    static_configs:
+      - targets: ['auth-service:4000']
+    metrics_path: '/metrics'
+
+  - job_name: 'user-service'
+    static_configs:
+      - targets: ['user-service:5000']
+    metrics_path: '/metrics'
+
+  - job_name: 'pong-service'
+    static_configs:
+      - targets: ['pong-service:6061']
+    metrics_path: '/metrics'
