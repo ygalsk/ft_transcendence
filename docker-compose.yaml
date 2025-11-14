@@ -23,12 +23,12 @@ services:
       dockerfile: services/auth/Dockerfile
     environment:
       - PORT=4000
-      - DB_PATH=/data/auth.sqlite
+      - DB_PATH=/usr/src/app/data/auth.sqlite
       - JWT_SECRET=${JWT_SECRET:-default-secret-change-in-production}
       - SERVICE_JWT_SECRET=${SERVICE_JWT_SECRET:-default-service-secret-change-in-production}
       - USER_SERVICE_URL=http://user-service:5000
     volumes:
-      - auth-data:/data
+      - auth-data:/usr/src/app/data
     networks:
       - backend
 
@@ -38,11 +38,11 @@ services:
       dockerfile: services/user/Dockerfile
     environment:
       - PORT=5000
-      - DB_PATH=/data/user.sqlite
+      - DB_PATH=/usr/src/app/data/user.sqlite
       - JWT_SECRET=${JWT_SECRET:-default-secret-change-in-production}
       - SERVICE_JWT_SECRET=${SERVICE_JWT_SECRET:-default-service-secret-change-in-production}
     volumes:
-      - user-data:/data
+      - user-data:/usr/src/app/data
     networks:
       - backend
 
@@ -61,12 +61,12 @@ services:
       dockerfile: services/pong/Dockerfile
     environment:
       - PONG_PORT=6061
-      - DB_PATH=/data/pong.sqlite
+      - DB_PATH=/usr/src/app/data/pong.sqlite
       - JWT_SECRET=${JWT_SECRET:-default-secret-change-in-production}
       - SERVICE_JWT_SECRET=${SERVICE_JWT_SECRET:-default-service-secret-change-in-production}
       - USER_SERVICE_URL=http://user-service:5000
     volumes:
-      - pong-data:/data
+      - pong-data:/usr/src/app/data
     networks:
       - backend
     depends_on:

@@ -13,6 +13,8 @@ COPY services/auth/db ./db
 
 RUN npm run build
 
+RUN mkdir -p /usr/src/app/data && chown node:node /usr/src/app/data
+
 USER node
 EXPOSE 4000
 CMD ["npm", "start"]
