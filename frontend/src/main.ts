@@ -170,7 +170,7 @@ document.addEventListener("DOMContentLoaded", () => {
     currentRoom = roomName;
     append("chat_messages", `🔗 Connecting to room "${roomName}"...`);
 
-    socket = io("http://localhost:6000", { transports: ["websocket"] });
+    socket = io({ transports: ["websocket"] });
 
     socket.on("connect", () => {
       append("chat_messages", `✅ Connected! socket.id=${socket.id}`);

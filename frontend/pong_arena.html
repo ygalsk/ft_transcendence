@@ -7,8 +7,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- Tailwind (ok for dev; swap to CLI in prod) -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Socket.IO client served by the pong-service -->
-  <script src="http://localhost:6061/socket.io/socket.io.js"></script>
+  <!-- Socket.IO client from CDN -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body class="bg-slate-900 text-slate-100">
   <div class="max-w-4xl mx-auto p-4">
@@ -42,7 +42,7 @@
     const statusBox = document.getElementById("status");
     const btnQueue = document.getElementById("btnQueue");
 
-    const socket = io("http://localhost:6061", { transports: ["websocket"] });
+    const socket = io({ transports: ["websocket"] });
 
     let mySide /** @type {"left"|"right"|null} */ = null;
     let lastState = null;

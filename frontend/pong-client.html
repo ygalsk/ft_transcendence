@@ -46,7 +46,7 @@
     }
 
     // --- Socket.IO connection ---
-    const socket = io("http://localhost:6061", {
+    const socket = io({
       transports: ["websocket"],
       auth: { token: JWT },
     });
