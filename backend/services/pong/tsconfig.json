@@ -8,5 +8,5 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*", "shared/**/*"]
+  "include": ["src/**/*", "shared/**/*", "backup_old_code/physics.ts", "backup_old_code/matchmaking.ts", "backup_old_code/pong.socket.ts", "backup_old_code/match.routes.ts"]
 }
