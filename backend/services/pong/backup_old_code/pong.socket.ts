@@ -2,8 +2,8 @@ import fp from 'fastify-plugin';
 import { FastifyInstance } from 'fastify';
 import { Socket } from 'socket.io';
 import { rooms, endMatch } from '../game/room';
-import { handlePlayerJoin, handlePlayerLeave } from '../game/matchmaking';
-import { updatePaddlePosition } from '../game/physics';
+import { handlePlayerJoin, handlePlayerLeave } from './matchmaking';
+import { updatePaddlePosition } from './physics';
 
 async function pongSocketPlugin(fastify: FastifyInstance) {
   // Wait for Socket.IO to be ready
