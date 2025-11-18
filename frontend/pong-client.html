@@ -1,172 +1,55 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>🎾 Pong Game (Authenticated)</title>
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-  <style>
-    body {
-      margin: 0;
-      background: #0f172a;
-      color: #e2e8f0;
-      font-family: monospace;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-    }
+  <head>
+    <meta charset="UTF-8" />
+    <title>Pong Test</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  </head>
 
-    canvas {
-      background: #1e293b;
-      border: 2px solid #38bdf8;
-      border-radius: 10px;
-      display: block;
-    }
+  <body style="background: #111; color: #eee; font-family: monospace; padding: 20px;">
+    <h1>Pong Test Page</h1>
 
-    #info {
-      margin-top: 10px;
-      text-align: center;
-      font-size: 1rem;
-      color: #bae6fd;
-    }
-  </style>
-</head>
-<body>
-  <h2>🎮 Real-time Pong (Authenticated)</h2>
-  <canvas id="game" width="800" height="500"></canvas>
-  <div id="info">Connecting...</div>
+    <button onclick="joinCasualAI()">Join Casual vs AI</button>
+    <button onclick="joinCasual()">Join Casual vs Human</button>
 
-  <script>
-    // --- Check login / JWT ---
-    const JWT = localStorage.getItem("jwt");
-    if (!JWT) {
-      alert("⚠️ You must log in first!");
-      window.location.href = "/login.html";
-    }
+    <pre id="log"></pre>
 
-    // --- Socket.IO connection ---
-    const socket = io({
-      transports: ["websocket"],
-      auth: { token: JWT },
-    });
+    <script>
+      const log = (msg) => {
+        document.getElementById("log").textContent += msg + "\n";
+      };
 
-    const canvas = document.getElementById("game");
-    const ctx = canvas.getContext("2d");
-    const info = document.getElementById("info");
+      // Connect to pong-service through Caddy
+      const socket = io("http://localhost:8080", {
+        path: "/socket.io",
+        transports: ["websocket"]
+      });
 
-    let side = null;
-    let paddleY = 200;
-    let opponentY = 200;
-    let ball = { x: 400, y: 250 };
-    let score = { left: 0, right: 0 };
+      socket.on("connect", () => log("Connected: " + socket.id));
+      socket.on("waiting", (m) => log("Waiting: " + JSON.stringify(m)));
+      socket.on("match_start", (m) => log("MATCH_START: " + JSON.stringify(m)));
+      socket.on("state", (m) => log("STATE: " + JSON.stringify(m)));
+      socket.on("match_end", (m) => log("MATCH_END: " + JSON.stringify(m)));
+      socket.on("error", (m) => log("ERROR: " + JSON.stringify(m)));
 
-    const paddleH = 80, paddleW = 10;
-
-    function setInfo(msg) {
-      info.textContent = msg;
-    }
-
-    // --- Drawing the game ---
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = "#0f172a";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // center line
-      ctx.strokeStyle = "#334155";
-      ctx.beginPath();
-      ctx.setLineDash([10, 10]);
-      ctx.moveTo(canvas.width / 2, 0);
-      ctx.lineTo(canvas.width / 2, canvas.height);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // ball
-      ctx.fillStyle = "#fbbf24";
-      ctx.beginPath();
-      ctx.arc(ball.x, ball.y, 8, 0, Math.PI * 2);
-      ctx.fill();
-
-      // paddles
-      ctx.fillStyle = "#38bdf8";
-      if (side === "left") {
-        ctx.fillRect(20, paddleY, paddleW, paddleH);
-        ctx.fillRect(canvas.width - 30, opponentY, paddleW, paddleH);
-      } else if (side === "right") {
-        ctx.fillRect(20, opponentY, paddleW, paddleH);
-        ctx.fillRect(canvas.width - 30, paddleY, paddleW, paddleH);
+      function joinCasualAI() {
+        log("Joining AI...");
+        socket.emit("join_casual", { vsAi: true });
       }
 
-      // score
-      ctx.fillStyle = "#f8fafc";
-      ctx.font = "24px monospace";
-      ctx.textAlign = "center";
-      ctx.fillText(`${score.left} : ${score.right}`, canvas.width / 2, 30);
-
-      requestAnimationFrame(draw);
-    }
-    draw();
-
-    // --- Smooth paddle motion ---
-    let moveInterval = null;
-    let currentDirection = null;
-
-    function startMoving(direction) {
-      if (moveInterval) return;
-      currentDirection = direction;
-      moveInterval = setInterval(() => {
-        const step = 8;
-        if (direction === "up") paddleY -= step;
-        if (direction === "down") paddleY += step;
-        paddleY = Math.max(0, Math.min(420, paddleY));
-        socket.emit("move", { y: paddleY });
-      }, 30);
-    }
-
-    function stopMoving() {
-      if (moveInterval) clearInterval(moveInterval);
-      moveInterval = null;
-      currentDirection = null;
-    }
-
-    window.addEventListener("keydown", (e) => {
-      if (side === "left") {
-        if (e.key === "w" && currentDirection !== "up") startMoving("up");
-        if (e.key === "s" && currentDirection !== "down") startMoving("down");
-      } else if (side === "right") {
-        if (e.key === "ArrowUp" && currentDirection !== "up") startMoving("up");
-        if (e.key === "ArrowDown" && currentDirection !== "down") startMoving("down");
+      function joinCasual() {
+        log("Joining Human...");
+        socket.emit("join_casual", { vsAi: false });
       }
-    });
-    window.addEventListener("keyup", stopMoving);
 
-    // --- Socket events ---
-    socket.on("connect", () => setInfo("🕹️ Connected, waiting for opponent..."));
-    socket.on("waiting", (m) => setInfo(m.message));
-    socket.on("match_start", (msg) => {
-      side = msg.you;
-      setInfo(`🏓 Match started! You are ${side.toUpperCase()}.`);
-    });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowUp") socket.emit("input", { up: true });
+        if (e.key === "ArrowDown") socket.emit("input", { down: true });
+      });
 
-    socket.on("state", (data) => {
-      ball = data.ball;
-      score = data.score;
-      if (side === "left") {
-        opponentY = data.paddles.right;
-      } else if (side === "right") {
-        opponentY = data.paddles.left;
-      }
-    });
-
-    socket.on("match_end", (msg) =>
-      setInfo(
-        `🏁 Game Over! Winner: ${msg.winner} (${msg.finalScore.left} - ${msg.finalScore.right})`
-      )
-    );
-
-    socket.on("disconnect", () => setInfo("🔴 Disconnected"));
-    socket.on("error", (e) => setInfo("❌ " + e.message));
-  </script>
-</body>
+      document.addEventListener("keyup", () => {
+        socket.emit("input", { up: false, down: false });
+      });
+    </script>
+  </body>
 </html>
