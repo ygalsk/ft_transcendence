@@ -11,6 +11,12 @@ COPY services/pong/tsconfig.json ./
 COPY services/pong/src ./src
 COPY services/pong/db ./db
 
+# Ensure DB directory exists in the image
+RUN mkdir -p /usr/src/app/data
+
+# Set default DB path
+ENV DB_PATH=/usr/src/app/data/pong.sqlite
+
 RUN npm run build
 
 EXPOSE 6061
