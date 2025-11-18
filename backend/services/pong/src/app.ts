@@ -7,8 +7,9 @@ import authPlugin from '../shared/plugins/auth';
 import swaggerPlugin from '../shared/plugins/swagger';
 import prometheusPlugin from '../shared/plugins/prometheus';
 import socketIOPlugin from '../shared/plugins/socketio';
-import pongSocketPlugin from '../backup_old_code/pong.socket';
-import matchRoutes from '../backup_old_code/match.routes';
+import pongSocketPlugin from './plugins/pong.socket';
+import matchRoutes from './routes/match.routes';
+//import tournamentRoutes from  './routes/tournament.routes';
 
 export function buildApp() {
   const app = fastify({ logger: true }).withTypeProvider<TypeBoxTypeProvider>();

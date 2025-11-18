@@ -46,28 +46,35 @@ async function socketIOPlugin(fastify: FastifyInstance, options: SocketIOPluginO
 
   // JWT Authentication Middleware
   io.use(async (socket, next) => {
-    try {
-      const token = socket.handshake.auth?.token;
+  const token = socket.handshake.auth?.token;
 
-      if (!token) {
-        fastify.log.warn('Socket.IO connection attempt without token');
-        return next(new Error('Missing authentication token'));
-      }
+  if (!token) {
+    // No token ⇒ treat as guest
+    socket.data.user = null;  
+    fastify.log.info('Guest connected to WebSocket service');
+    return next();
+  }
 
-      // Verify JWT token
-      const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
+  try {
+    // Verify JWT token
+    const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
 
-      // Attach user data to socket
-      socket.data.user = decoded;
+    socket.data.user = decoded;
 
-      fastify.log.info({ userId: decoded.userId, email: decoded.email }, 'Socket.IO user authenticated');
-      next();
+    fastify.log.info(
+      { userId: decoded.userId, email: decoded.email },
+      'Socket.IO user authenticated'
+    );
 
-    } catch (error: any) {
-      fastify.log.error({ error: error.message }, 'Socket.IO authentication failed');
-      next(new Error('Invalid or expired token'));
-    }
-  });
+    next();
+
+  } catch (error: any) {
+    fastify.log.warn({ error: error.message }, 'Invalid JWT, treating as guest');
+    // Treat invalid token as guest
+    socket.data.user = null;
+    next();
+  }
+});
 
   // Attach to Fastify instance
   fastify.decorate('io', io);
