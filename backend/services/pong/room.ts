@@ -1,148 +1,481 @@
-import { FastifyInstance } from 'fastify';
-import { Socket } from 'socket.io';
-import { generateServiceToken } from '../../shared/plugins/auth';
-import { startGameLoop } from './physics';
+//
+// src/game/room.ts
+//
 
-// -------------------- Types --------------------
-export interface PlayerState {
-  socket: Socket;
-  paddleY: number;
-  score: number;
-  side: "left" | "right";
+import {
+  BallState,
+  GameState,
+  MatchConfig,
+  PlayerInput,
+  PlayerSide,
+  RoomPlayer,
+  ScoreState,
+  SerializedGameState,
+  AiDifficulty,
+} from "./types";
+import {
+  MS_PER_TICK,
+  applyPlayerInput,
+  createInitialBall,
+  createInitialPaddles,
+  resetBall,
+  updateBall,
+} from "./physics";
+import { AiController } from "./ai";
+
+// ---------------------------
+// Match end types
+// ---------------------------
+
+export type MatchEndReason = "normal" | "disconnect" | "forfeit";
+
+export interface MatchFinishedPayload {
+  matchId: string;
+  tournamentId?: number;
+  winnerSide: PlayerSide;
+  score: ScoreState;
+  leftPlayer: RoomPlayer | null;
+  rightPlayer: RoomPlayer | null;
+  reason: MatchEndReason;
 }
 
-export interface GameRoom {
-  id: string;
-  left: PlayerState;
-  right: PlayerState;
-  ball: { x: number; y: number; vx: number; vy: number };
-  width: number;
-  height: number;
-  isActive: boolean;
-  loop?: NodeJS.Timeout;
-  startTime?: number;
-}
+// ---------------------------
+// Room constants
+// ---------------------------
 
-// Global room storage
-export const rooms: Map<string, GameRoom> = new Map();
+const DISCONNECT_GRACE_MS = 60_000; // 60s grace
+const SERVE_DELAY_MS = 1_000;       // 1s pause before each serve
 
-// -------------------- Helper Functions --------------------
-function makeRoomId(): string {
-  return "room_" + Math.random().toString(36).slice(2, 8);
-}
+// ---------------------------
+// Room class
+// ---------------------------
 
-// -------------------- Room Management --------------------
-export function createGameRoom(app: FastifyInstance, p1: Socket, p2: Socket): GameRoom {
-  const roomId = makeRoomId();
-  const width = 800, height = 500;
+export class Room {
+  public readonly id: string;
+  public readonly config: MatchConfig;
 
-  const room: GameRoom = {
-    id: roomId,
-    width,
-    height,
-    isActive: true,
-    left: { socket: p1, paddleY: 200, score: 0, side: "left" },
-    right: { socket: p2, paddleY: 200, score: 0, side: "right" },
-    ball: { x: 400, y: 250, vx: 4, vy: 3 },
-    startTime: Date.now(),
+  public state: GameState = "waiting";
+
+  public paddles: { left: { y: number; height: number }; right: { y: number; height: number } };
+  public ball: BallState;
+  public score: ScoreState = { left: 0, right: 0 };
+
+  public players: { left: RoomPlayer | null; right: RoomPlayer | null } = {
+    left: null,
+    right: null,
+  };
+  public spectators: RoomPlayer[] = [];
+
+  private lastInput: Record<PlayerSide, PlayerInput> = {
+    left: { up: false, down: false },
+    right: { up: false, down: false },
   };
 
-  rooms.set(roomId, room);
-  p1.data.roomId = roomId;
-  p2.data.roomId = roomId;
-  p1.join(roomId);
-  p2.join(roomId);
+  private tickTimer: NodeJS.Timeout | null = null;
+  private serveTimer: NodeJS.Timeout | null = null;
+  private aiControllers: Partial<Record<PlayerSide, AiController>> = {};
 
-  const leftName = p1.data.user?.display_name || p1.data.user?.email;
-  const rightName = p2.data.user?.display_name || p2.data.user?.email;
-  app.io.to(roomId).emit("system", `🎮 Match started: ${leftName} vs ${rightName}`);
-  p1.emit("match_start", { roomId, you: "left", opponent: rightName });
-  p2.emit("match_start", { roomId, you: "right", opponent: leftName });
+  private createdAt: number = Date.now();
+  private finishedAt?: number;
+  private currentServeSide: PlayerSide | null = null;
 
-  startGameLoop(app, room);
+  // Hooks plugged in by WS / tournament / app layer
+  public broadcastState: (state: SerializedGameState) => void = () => {};
+  public onMatchFinished: (payload: MatchFinishedPayload) => void = () => {};
+  public log: (level: "info" | "warn" | "error", message: string, meta?: any) => void = () => {};
+
+  constructor(id: string, config: MatchConfig) {
+    this.id = id;
+    this.config = config;
+
+    this.paddles = createInitialPaddles();
+    this.ball = createInitialBall();
+  }
+
+  // ---------------------------
+  // Lifecycle
+  // ---------------------------
+
+  public start(): void {
+    if (this.tickTimer) return;
+    this.state = "waiting";
+    this.tickTimer = setInterval(() => this.tick(), MS_PER_TICK);
+  }
+
+  public stop(): void {
+    if (this.tickTimer) {
+      clearInterval(this.tickTimer);
+      this.tickTimer = null;
+    }
+    if (this.serveTimer) {
+      clearTimeout(this.serveTimer);
+      this.serveTimer = null;
+    }
+
+    // Clear disconnect timers
+    (["left", "right"] as PlayerSide[]).forEach((side) => {
+      const p = this.players[side];
+      if (p?.disconnectTimer) {
+        clearTimeout(p.disconnectTimer);
+        p.disconnectTimer = undefined;
+      }
+    });
+  }
+
+  // ---------------------------
+  // Player Management
+  // ---------------------------
+
+  public addHumanPlayer(params: {
+    socketId: string;
+    userId: number | null;
+    displayName: string;
+    avatarUrl?: string;
+  }): PlayerSide | null {
+    const { socketId, userId, displayName, avatarUrl } = params;
+
+    if (!this.players.left) {
+      this.players.left = {
+        socketId,
+        userId,
+        displayName,
+        avatarUrl,
+        side: "left",
+        isAi: false,
+        connected: true,
+      };
+      this.log("info", "Player joined room", { roomId: this.id, side: "left", userId });
+      this.maybeStartServing();
+      return "left";
+    }
+
+    if (!this.players.right) {
+      this.players.right = {
+        socketId,
+        userId,
+        displayName,
+        avatarUrl,
+        side: "right",
+        isAi: false,
+        connected: true,
+      };
+      this.log("info", "Player joined room", { roomId: this.id, side: "right", userId });
+      this.maybeStartServing();
+      return "right";
+    }
+
+    // Spectator fallback
+    this.spectators.push({
+      socketId,
+      userId,
+      displayName,
+      avatarUrl,
+      side: "left", // irrelevant for spectators
+      isAi: false,
+      connected: true,
+    });
+    this.log("info", "Spectator joined room", { roomId: this.id, userId, displayName });
+    return null;
+  }
+
+  /**
+   * Add AI on a given side, with difficulty.
+   */
+  public addAi(
+    side: PlayerSide,
+    difficulty: AiDifficulty = "medium",
+    displayName = "AI"
+  ): void {
+    if (this.players[side]) return; // already taken
+
+    const fakeSocketId = `AI-${this.id}-${side}`;
+    this.players[side] = {
+      socketId: fakeSocketId,
+      userId: null,
+      displayName,
+      avatarUrl: undefined,
+      side,
+      isAi: true,
+      connected: true,
+    };
+
+    this.aiControllers[side] = new AiController(side, difficulty);
+
+    this.log("info", "AI player added", {
+      roomId: this.id,
+      side,
+      difficulty,
+    });
+
+    this.maybeStartServing();
+  }
+
+  public handleDisconnect(socketId: string): void {
+    for (const side of ["left", "right"] as PlayerSide[]) {
+      const player = this.players[side];
+      if (player && player.socketId === socketId && !player.isAi) {
+        player.connected = false;
+        this.log("info", "Player disconnected", {
+          roomId: this.id,
+          side,
+          userId: player.userId,
+        });
+        this.startDisconnectTimer(side);
+        return;
+      }
+    }
+
+    // if spectator
+    this.spectators = this.spectators.filter((s) => s.socketId !== socketId);
+  }
+
+  public handleReconnect(params: { socketId: string; userId: number }): PlayerSide | null {
+    const { socketId, userId } = params;
+
+    for (const side of ["left", "right"] as PlayerSide[]) {
+      const player = this.players[side];
+      if (player && player.userId === userId && !player.isAi) {
+        player.socketId = socketId;
+        player.connected = true;
+
+        if (player.disconnectTimer) {
+          clearTimeout(player.disconnectTimer);
+          player.disconnectTimer = undefined;
+        }
+
+        this.log("info", "Player reconnected", { roomId: this.id, side, userId });
+        this.maybeStartServing();
+        return side;
+      }
+    }
+
+    return null;
+  }
+
+  private startDisconnectTimer(side: PlayerSide): void {
+    const player = this.players[side];
+    if (!player || player.disconnectTimer) return;
+
+    player.disconnectTimer = setTimeout(() => {
+      const current = this.players[side];
+      if (!current || current.connected) return;
+
+      const other: PlayerSide = side === "left" ? "right" : "left";
+      this.log("warn", "Player lost by disconnect", {
+        roomId: this.id,
+        disconnectedSide: side,
+        winnerSide: other,
+      });
+      this.finishMatch(other, "disconnect");
+    }, DISCONNECT_GRACE_MS);
+  }
+
+  // ---------------------------
+  // Input Handling
+  // ---------------------------
+
+  public setInput(side: PlayerSide, input: PlayerInput): void {
+    this.lastInput[side] = input;
+  }
+
+  // ---------------------------
+  // Main Tick Loop
+  // ---------------------------
+
+  private tick(): void {
+    if (this.state === "finished") return;
+
+    const hasLeft = !!this.players.left;
+    const hasRight = !!this.players.right;
+
+    const leftReady = this.players.left?.connected ?? false;
+    const rightReady = this.players.right?.connected ?? false;
+
+    if (!hasLeft || !hasRight || !leftReady || !rightReady) {
+      this.state = "waiting";
+      this.broadcastState(this.getSerializedState());
+      return;
+    }
+
+    if (this.state === "waiting" || this.state === "starting" || this.state === "paused") {
+      this.broadcastState(this.getSerializedState());
+      return;
+    }
+
+    // 1) AI reads state and sets its inputs (no more than once/sec)
+    this.updateAiInputs();
+
+    // 2) Apply inputs to paddles
+    if (this.players.left) {
+      applyPlayerInput(this.paddles.left, this.lastInput.left);
+    }
+    if (this.players.right) {
+      applyPlayerInput(this.paddles.right, this.lastInput.right);
+    }
+
+    // 3) Update ball & score
+    const result = updateBall(this.ball, this.paddles, this.score);
+
+    // 4) Scoring
+    if (result.scored) {
+      const scoredSide = result.scored;
+      const concededSide: PlayerSide = scoredSide === "left" ? "right" : "left";
+
+      if (
+        this.score.left >= this.config.scoreLimit ||
+        this.score.right >= this.config.scoreLimit
+      ) {
+        const winnerSide: PlayerSide =
+          this.score.left > this.score.right ? "left" : "right";
+        this.finishMatch(winnerSide, "normal");
+      } else {
+        this.state = "paused";
+        this.scheduleServe(concededSide);
+      }
+    }
+
+    // 5) Broadcast
+    this.broadcastState(this.getSerializedState());
+  }
+
+  // ---------------------------
+  // Serving Logic
+  // ---------------------------
+
+  private maybeStartServing(): void {
+    const leftReady = this.players.left?.connected ?? false;
+    const rightReady = this.players.right?.connected ?? false;
+
+    if (!leftReady || !rightReady) return;
+
+    if (!this.currentServeSide) {
+      this.currentServeSide = Math.random() < 0.5 ? "left" : "right";
+    }
+
+    if (this.state === "waiting") {
+      this.scheduleServe(this.currentServeSide);
+    }
+  }
+
+  private scheduleServe(servingSide: PlayerSide): void {
+    this.currentServeSide = servingSide;
+
+    if (this.serveTimer) {
+      clearTimeout(this.serveTimer);
+      this.serveTimer = null;
+    }
+
+    this.state = "starting";
+
+    this.serveTimer = setTimeout(() => {
+      resetBall(this.ball, servingSide);
+      this.state = "playing";
+      this.broadcastState(this.getSerializedState());
+    }, SERVE_DELAY_MS);
+  }
+
+  // ---------------------------
+  // AI Handling
+  // ---------------------------
+
+  private updateAiInputs(): void {
+    for (const side of ["left", "right"] as PlayerSide[]) {
+      const player = this.players[side];
+      if (!player?.isAi) continue;
+
+      const controller = this.aiControllers[side];
+      if (!controller) continue;
+
+      const input = controller.getInput(this.getSerializedState());
+      this.lastInput[side] = input;
+    }
+  }
+
+  // ---------------------------
+  // Match End
+  // ---------------------------
+
+  private finishMatch(winnerSide: PlayerSide, reason: MatchEndReason): void {
+    if (this.state === "finished") return;
+
+    this.state = "finished";
+    this.finishedAt = Date.now();
+    this.stop();
+
+    const payload: MatchFinishedPayload = {
+      matchId: this.id,
+      tournamentId: this.config.tournamentId,
+      winnerSide,
+      score: { ...this.score },
+      leftPlayer: this.players.left,
+      rightPlayer: this.players.right,
+      reason,
+    };
+
+    this.onMatchFinished(payload);
+
+    this.broadcastState(this.getSerializedState());
+  }
+
+  // ---------------------------
+  // State Serialization
+  // ---------------------------
+
+  public getSerializedState(): SerializedGameState {
+    const left = this.players.left;
+    const right = this.players.right;
+
+    return {
+      state: this.state,
+      ball: this.ball,
+      paddles: {
+        left: this.paddles.left,
+        right: this.paddles.right,
+      },
+      score: { ...this.score },
+      players: {
+        left: {
+          displayName: left?.displayName ?? "Waiting...",
+          avatarUrl: left?.avatarUrl,
+          userId: left?.userId ?? null,
+        },
+        right: {
+          displayName: right?.displayName ?? "Waiting...",
+          avatarUrl: right?.avatarUrl,
+          userId: right?.userId ?? null,
+        },
+      },
+      meta: {
+        roomId: this.id,
+        timestamp: Date.now(),
+        isTournament: !!this.config.tournamentId,
+        tournamentId: this.config.tournamentId,
+      },
+    };
+  }
+}
+
+// ---------------------------
+// Room Registry
+// ---------------------------
+
+export const rooms = new Map<string, Room>();
+
+export function createRoom(id: string, config: MatchConfig): Room {
+  const room = new Room(id, config);
+  rooms.set(id, room);
+  room.start();
   return room;
 }
 
-export async function endMatch(app: FastifyInstance, room: GameRoom, winnerSide: "left" | "right") {
-  room.isActive = false;
-
-  // Stop game loop
-  if (room.loop) {
-    clearInterval(room.loop);
-    room.loop = undefined;
-  }
-
-  const winnerUser = room[winnerSide].socket.data.user;
-  const loserUser = winnerSide === "left"
-    ? room.right.socket.data.user
-    : room.left.socket.data.user;
-
-  const winnerName = winnerUser?.display_name || winnerUser?.email || winnerUser?.userId;
-  const loserName = loserUser?.display_name || loserUser?.email || loserUser?.userId;
-
-  app.io.to(room.id).emit("match_end", {
-    winner: winnerName,
-    loser: loserName,
-    finalScore: { left: room.left.score, right: room.right.score },
-  });
-
-  app.log.info(`🏁 Match ended: ${winnerName} defeated ${loserName}`);
-
-  // Save to database and report to user service
-  await saveMatchResult(app, room, winnerSide);
-
-  app.io.socketsLeave(room.id);
-  rooms.delete(room.id);
+export function getRoom(id: string): Room | undefined {
+  return rooms.get(id);
 }
 
-async function saveMatchResult(app: FastifyInstance, room: GameRoom, winnerSide: "left" | "right") {
-  const winner = room[winnerSide];
-  const loser = winnerSide === "left" ? room.right : room.left;
-  const winnerUser = winner.socket.data.user;
-  const loserUser = loser.socket.data.user;
-
-  if (!winnerUser || !loserUser) {
-    app.log.warn("⚠️ Skipping match report — missing user data");
-    return;
-  }
-
-  const duration = room.startTime ? Math.floor((Date.now() - room.startTime) / 1000) : null;
-
-  // Save to local database
-  try {
-    const stmt = app.db.prepare(`
-      INSERT INTO matches (winner_id, loser_id, left_score, right_score, duration)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-    stmt.run(winnerUser.userId, loserUser.userId, room.left.score, room.right.score, duration);
-    app.log.info({ winnerId: winnerUser.userId, loserId: loserUser.userId }, 'Match saved to database');
-  } catch (error: any) {
-    app.log.error({ error: error.message }, 'Failed to save match to database');
-  }
-
-  // Report to user service
-  try {
-    const token = generateServiceToken("pong");
-    const response = await fetch(`${process.env.USER_SERVICE_URL || 'http://user-service:5000'}/internal/match-result`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Service ${token}`,
-      },
-      body: JSON.stringify({
-        winnerId: winnerUser.userId,
-        loserId: loserUser.userId,
-        leftScore: room.left.score,
-        rightScore: room.right.score,
-      }),
-    });
-
-    if (!response.ok) {
-      app.log.error(`❌ Failed to report match to user service: ${response.statusText}`);
-    } else {
-      app.log.info(`✅ Reported match result to user service`);
-    }
-  } catch (err: any) {
-    app.log.error({ error: err.message }, "Error reporting match result to user service");
+export function removeRoom(id: string): void {
+  const room = rooms.get(id);
+  if (room) {
+    room.stop();
+    rooms.delete(id);
   }
 }
