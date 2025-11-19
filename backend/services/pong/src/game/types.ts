@@ -7,6 +7,8 @@
 // ---------------------------
 
 export type PlayerSide = "left" | "right";
+export type AiDifficulty = "easy" | "medium" | "hard";
+
 
 export type GameState =
   | "waiting"     // room created, waiting for players
@@ -44,11 +46,13 @@ export interface ScoreState {
 }
 
 export interface MatchConfig {
-  scoreLimit: number;          // default: 11
-  allowSpectators: boolean;    // default: true
-  enableAi: boolean;           // match may spawn an AI for absent player
-  tournamentId?: number;       // set only for tournament matches
+  scoreLimit: number;
+  allowSpectators: boolean;
+  enableAi: boolean;
+  aiDifficulty?: AiDifficulty;  // 👈 new
+  tournamentId?: number;
 }
+
 
 // ---------------------------
 // Player Identity in Room

@@ -8,7 +8,7 @@ import type { Server as HTTPServer } from 'node:http';
 const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
 
 export interface SocketData {
-  user?: AuthUser & { display_name?: string };
+  user: (AuthUser & { display_name?: string }) | null;
   roomId?: string;
 }
 
