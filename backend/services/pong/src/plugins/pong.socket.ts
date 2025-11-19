@@ -1,5 +1,5 @@
 //
-// src/plugins/pong.socket.ts — UPDATED WITH GUEST SUPPORT
+// src/plugins/pong.socket.ts — with AI difficulty + guest support
 //
 
 import fp from "fastify-plugin";
@@ -7,7 +7,7 @@ import { FastifyInstance } from "fastify";
 import { Socket } from "socket.io";
 
 import { createRoom, getRoom, removeRoom, Room } from "../game/room";
-import { MatchConfig, PlayerSide, PlayerInput } from "../game/types";
+import { MatchConfig, PlayerSide, PlayerInput, AiDifficulty } from "../game/types";
 import { generateServiceToken } from "../../shared/plugins/auth";
 
 const DEFAULT_SCORE_LIMIT = 11;
@@ -34,15 +34,13 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
     const io = fastify.io;
 
     io.on("connection", async (socket: Socket) => {
-
       //
-      // 1️⃣  Retrieve authenticated user OR create guest identity
+      // 1️⃣ Get authenticated user OR create guest identity
       //
-
       let user = socket.data.user as AuthUser | null;
 
       if (!user) {
-        // Guest user — allowed for casual mode
+        // Guest user — allowed for casual
         user = {
           userId: null,
           email: null,
@@ -56,9 +54,7 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
           "Guest connected to Pong service"
         );
       } else {
-        //
-        // 2️⃣  Authenticated user — optionally enrich display name
-        //
+        // Authenticated user: enrich display name if missing
         if (!user.display_name && user.userId !== null) {
           try {
             const res = await fetch(
@@ -92,24 +88,30 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
       // CASUAL MATCHMAKING
       // ------------------------
 
-      socket.on("join_casual", (payload?: { vsAi?: boolean }) => {
+      socket.on(
+        "join_casual",
+        (payload?: { vsAi?: boolean; difficulty?: AiDifficulty }) => {
         const vsAi = payload?.vsAi ?? false;
+        const difficulty: AiDifficulty = payload?.difficulty ?? "medium";
         const displayName = getDisplayName(user!);
 
         if (vsAi) {
-          // Create room vs AI
+          //
+          // 💻 Human vs AI
+          //
           const matchId = `casual-${socket.id}-${Date.now()}`;
           const config: MatchConfig = {
             scoreLimit: DEFAULT_SCORE_LIMIT,
             allowSpectators: true,
             enableAi: true,
+            aiDifficulty: difficulty,
           };
 
           const room = setupRoom(fastify, matchId, config);
 
           const side: PlayerSide | null = room.addHumanPlayer({
             socketId: socket.id,
-            userId: user!.userId, // may be null for guests
+            userId: user!.userId,
             displayName,
             avatarUrl: undefined,
           });
@@ -124,7 +126,7 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
           }
 
           const aiSide: PlayerSide = side === "left" ? "right" : "left";
-          room.addAi(aiSide);
+          room.addAi(aiSide, difficulty);
 
           socket.data.roomId = room.id;
           socket.data.side = side;
@@ -133,18 +135,20 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
           socket.emit("match_start", {
             matchId: room.id,
             you: side,
-            opponent: "AI",
+            opponent: `AI (${difficulty})`,
             mode: "casual",
           });
 
           fastify.log.info(
-            { roomId: room.id, playerSide: side, as: displayName },
+            { roomId: room.id, playerSide: side, as: displayName, difficulty },
             "Casual vs AI match started"
           );
           return;
         }
 
-        // Human vs Human casual matchmaking
+        //
+        // 🤝 Human vs Human casual matchmaking
+        //
         if (!waitingSocket) {
           waitingSocket = socket;
           socket.emit("waiting", { message: "🕐 Waiting for opponent..." });
@@ -163,7 +167,6 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
 
           const room = setupRoom(fastify, matchId, config);
 
-          // Add both players
           const p1Side = room.addHumanPlayer({
             socketId: p1.id,
             userId: p1User.userId,
@@ -222,7 +225,7 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
       });
 
       // ------------------------
-      // JOIN MATCH (for tournaments or direct challenges)
+      // JOIN MATCH (tournament / direct)
       // ------------------------
 
       socket.on(
@@ -262,7 +265,6 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
           });
 
           if (!side) {
-            // Join as spectator
             socket.data.roomId = room.id;
             socket.join(room.id);
             socket.emit("spectator_joined", {
@@ -298,6 +300,7 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
       // ------------------------
       // INPUT EVENTS
       // ------------------------
+
       socket.on("input", (data: { up?: boolean; down?: boolean }) => {
         const roomId = socket.data.roomId as string | undefined;
         const side = socket.data.side as PlayerSide | undefined;
@@ -317,6 +320,7 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
       // ------------------------
       // DISCONNECT
       // ------------------------
+
       socket.on("disconnect", () => {
         fastify.log.info({ socketId: socket.id }, "Socket disconnected");
 
@@ -340,7 +344,11 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
 // Room setup helper
 // ------------------------
 
-function setupRoom(fastify: FastifyInstance, matchId: string, config: MatchConfig): Room {
+function setupRoom(
+  fastify: FastifyInstance,
+  matchId: string,
+  config: MatchConfig
+): Room {
   const room = createRoom(matchId, config);
 
   room.log = (level, message, meta) => {
@@ -390,7 +398,7 @@ function setupRoom(fastify: FastifyInstance, matchId: string, config: MatchConfi
     fastify.io.socketsLeave(room.id);
     removeRoom(room.id);
 
-    // Persist only authenticated results
+    // Persist only authenticated vs authenticated results
     if (!winner?.userId || !loser?.userId) {
       fastify.log.warn(
         { roomId: room.id },
