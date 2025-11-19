@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
   bio TEXT,
   wins INTEGER DEFAULT 0,
   losses INTEGER DEFAULT 0,
+  online INTEGER DEFAULT 0,
+  last_seen TEXT DEFAULT CURRENT_TIMESTAMP,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -22,3 +24,25 @@ CREATE TABLE IF NOT EXISTS match_history (
   FOREIGN KEY (winner_id) REFERENCES users(id),
   FOREIGN KEY (loser_id) REFERENCES users(id)
 );
+
+CREATE TABLE IF NOT EXISTS friendships (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  friend_id INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted')),
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (friend_id) REFERENCES users(id) ON DELETE CASCADE,
+
+  UNIQUE(user_id, friend_id),
+  CHECK(user_id != friend_id)
+);
+
+CREATE TRIGGER IF NOT EXISTS last_seen_update
+  AFTER UPDATE OF online ON users
+  FOR EACH ROW
+  WHEN NEW.online = 0 AND OLD.online = 1
+BEGIN
+  UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
