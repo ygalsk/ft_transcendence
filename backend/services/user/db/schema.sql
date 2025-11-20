@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS match_history (
   FOREIGN KEY (loser_id) REFERENCES users(id)
 );
 
+-- user->sender, friend->recipient
 CREATE TABLE IF NOT EXISTS friendships (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
