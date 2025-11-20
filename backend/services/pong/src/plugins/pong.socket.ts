@@ -95,56 +95,54 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
         const difficulty: AiDifficulty = payload?.difficulty ?? "medium";
         const displayName = getDisplayName(user!);
 
-        if (vsAi) {
-          //
-          // 💻 Human vs AI
-          //
-          const matchId = `casual-${socket.id}-${Date.now()}`;
-          const config: MatchConfig = {
-            scoreLimit: DEFAULT_SCORE_LIMIT,
-            allowSpectators: true,
-            enableAi: true,
-            aiDifficulty: difficulty,
-          };
+      if (vsAi) {
+        const matchId = `casual-${socket.id}-${Date.now()}`;
 
-          const room = setupRoom(fastify, matchId, config);
+        const config: MatchConfig = {
+          scoreLimit: DEFAULT_SCORE_LIMIT,
+          allowSpectators: true,
+          enableAi: true,
+          aiDifficulty: difficulty,
+        };
 
-          const side: PlayerSide | null = room.addHumanPlayer({
-            socketId: socket.id,
-            userId: user!.userId,
-            displayName,
-            avatarUrl: undefined,
-          });
+        const room = setupRoom(fastify, matchId, config);
 
-          if (!side) {
-            fastify.log.error(
-              { matchId, userId: user!.userId },
-              "Failed to assign side in vsAi match"
-            );
-            socket.emit("error", { message: "Unable to join match" });
-            return;
-          }
+        const side: PlayerSide | null = room.addHumanPlayer({
+          socketId: socket.id,
+          userId: user!.userId,
+          displayName,
+          avatarUrl: undefined,
+        });
 
-          const aiSide: PlayerSide = side === "left" ? "right" : "left";
-          room.addAi(aiSide, difficulty);
-
-          socket.data.roomId = room.id;
-          socket.data.side = side;
-          socket.join(room.id);
-
-          socket.emit("match_start", {
-            matchId: room.id,
-            you: side,
-            opponent: `AI (${difficulty})`,
-            mode: "casual",
-          });
-
-          fastify.log.info(
-            { roomId: room.id, playerSide: side, as: displayName, difficulty },
-            "Casual vs AI match started"
-          );
+        if (!side) {
+          fastify.log.error({ matchId, userId: user!.userId }, "Failed to assign side in vsAi match");
+          socket.emit("error", { message: "Unable to join match" });
           return;
         }
+
+        const aiSide: PlayerSide = side === "left" ? "right" : "left";
+
+        // 👇 Correct call
+        room.addAi(aiSide, `AI (${difficulty})`, difficulty);
+
+        socket.data.roomId = room.id;
+        socket.data.side = side;
+        socket.join(room.id);
+
+        socket.emit("match_start", {
+          matchId: room.id,
+          you: side,
+          opponent: `AI (${difficulty})`,
+          mode: "casual",
+        });
+
+        fastify.log.info(
+          { roomId: room.id, playerSide: side, as: displayName, difficulty },
+          "Casual vs AI match started"
+        );
+        return;
+}
+
 
         //
         // 🤝 Human vs Human casual matchmaking

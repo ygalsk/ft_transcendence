@@ -11,6 +11,7 @@ import {
   RoomPlayer,
   ScoreState,
   SerializedGameState,
+  AiDifficulty,        // ⭐ ADDED
 } from "./types";
 import {
   FIELD_HEIGHT,
@@ -127,10 +128,6 @@ export class Room {
   // Player Management
   // ---------------------------
 
-  /**
-   * Add a human player to the room.
-   * Returns assigned side ('left' | 'right') or null if added as spectator.
-   */
   public addHumanPlayer(params: {
     socketId: string;
     userId: number | null;
@@ -139,7 +136,6 @@ export class Room {
   }): PlayerSide | null {
     const { socketId, userId, displayName, avatarUrl } = params;
 
-    // Left free?
     if (!this.players.left) {
       this.players.left = {
         socketId,
@@ -155,7 +151,6 @@ export class Room {
       return "left";
     }
 
-    // Right free?
     if (!this.players.right) {
       this.players.right = {
         socketId,
@@ -171,13 +166,12 @@ export class Room {
       return "right";
     }
 
-    // Otherwise spectator
     this.spectators.push({
       socketId,
       userId,
       displayName,
       avatarUrl,
-      side: "left", // arbitrary; not used for spectators
+      side: "left",
       isAi: false,
       connected: true,
     });
@@ -185,9 +179,19 @@ export class Room {
     return null;
   }
 
-  public addAi(side: PlayerSide, displayName = "AI"): void {
-    if (this.players[side]) return; // already have a player
+  // ---------------------------
+  //  ⭐ UPDATED: AI supports difficulty
+  // ---------------------------
+
+  public addAi(
+    side: PlayerSide,
+    displayName = "AI",
+    difficulty?: AiDifficulty
+  ): void {
+    if (this.players[side]) return;
+
     const fakeSocketId = `AI-${this.id}-${side}`;
+
     this.players[side] = {
       socketId: fakeSocketId,
       userId: null,
@@ -197,14 +201,25 @@ export class Room {
       isAi: true,
       connected: true,
     };
-    this.aiControllers[side] = new AiController(side);
-    this.log("info", "AI player added", { roomId: this.id, side });
+
+    const chosenDifficulty: AiDifficulty =
+      difficulty ?? this.config.aiDifficulty ?? "medium";
+
+    this.aiControllers[side] = new AiController(side, chosenDifficulty);
+
+    this.log("info", "AI player added", {
+      roomId: this.id,
+      side,
+      difficulty: chosenDifficulty,
+    });
+
     this.maybeStartServing();
   }
 
-  /**
-   * Mark a socket as disconnected and start grace timer.
-   */
+  // ---------------------------
+  // Disconnect handling
+  // ---------------------------
+
   public handleDisconnect(socketId: string): void {
     for (const side of ["left", "right"] as PlayerSide[]) {
       const player = this.players[side];
@@ -216,17 +231,10 @@ export class Room {
       }
     }
 
-    // If spectator, just remove them
     this.spectators = this.spectators.filter((s) => s.socketId !== socketId);
   }
 
-  /**
-   * Reconnect a human player (same userId) to the room.
-   */
-  public handleReconnect(params: {
-    socketId: string;
-    userId: number;
-  }): PlayerSide | null {
+  public handleReconnect(params: { socketId: string; userId: number }): PlayerSide | null {
     const { socketId, userId } = params;
 
     for (const side of ["left", "right"] as PlayerSide[]) {
@@ -257,7 +265,6 @@ export class Room {
       const current = this.players[side];
       if (!current || current.connected) return;
 
-      // Opponent wins by disconnect
       const other: PlayerSide = side === "left" ? "right" : "left";
       this.log("warn", "Player lost by disconnect", {
         roomId: this.id,
@@ -277,7 +284,7 @@ export class Room {
   }
 
   // ---------------------------
-  // Main Tick Loop
+  // Tick Loop
   // ---------------------------
 
   private tick(): void {
@@ -289,39 +296,28 @@ export class Room {
     const leftReady = this.players.left?.connected ?? false;
     const rightReady = this.players.right?.connected ?? false;
 
-    // If we don't have two active players (or AI), we shouldn't move the ball
     if (!hasLeft || !hasRight || !leftReady || !rightReady) {
       this.state = "waiting";
       this.broadcastState(this.getSerializedState());
       return;
     }
 
-    // If we are waiting/starting/paused, the serve timer will eventually set us to "playing"
     if (this.state === "waiting" || this.state === "starting" || this.state === "paused") {
       this.broadcastState(this.getSerializedState());
       return;
     }
 
-    // 1) AI updates (reads state no more than once per second)
     this.updateAiInputs();
 
-    // 2) Apply inputs to paddles
-    if (this.players.left) {
-      applyPlayerInput(this.paddles.left, this.lastInput.left);
-    }
-    if (this.players.right) {
-      applyPlayerInput(this.paddles.right, this.lastInput.right);
-    }
+    if (this.players.left) applyPlayerInput(this.paddles.left, this.lastInput.left);
+    if (this.players.right) applyPlayerInput(this.paddles.right, this.lastInput.right);
 
-    // 3) Update ball & score
     const result = updateBall(this.ball, this.paddles, this.score);
 
-    // 4) Check if someone scored
     if (result.scored) {
       const scoredSide = result.scored;
       const concededSide: PlayerSide = scoredSide === "left" ? "right" : "left";
 
-      // Check win condition
       if (
         this.score.left >= this.config.scoreLimit ||
         this.score.right >= this.config.scoreLimit
@@ -330,13 +326,11 @@ export class Room {
           this.score.left > this.score.right ? "left" : "right";
         this.finishMatch(winnerSide, "normal");
       } else {
-        // Pause, then serve from the side that conceded (loser serves)
         this.state = "paused";
         this.scheduleServe(concededSide);
       }
     }
 
-    // 5) Broadcast state
     this.broadcastState(this.getSerializedState());
   }
 
@@ -345,14 +339,12 @@ export class Room {
   // ---------------------------
 
   private maybeStartServing(): void {
-    // Start serving only when both sides are connected or AI is present
     const leftReady = this.players.left?.connected ?? false;
     const rightReady = this.players.right?.connected ?? false;
 
     if (!leftReady || !rightReady) return;
 
     if (!this.currentServeSide) {
-      // First serve: random
       this.currentServeSide = Math.random() < 0.5 ? "left" : "right";
     }
 
@@ -363,6 +355,7 @@ export class Room {
 
   private scheduleServe(servingSide: PlayerSide): void {
     this.currentServeSide = servingSide;
+
     if (this.serveTimer) {
       clearTimeout(this.serveTimer);
       this.serveTimer = null;
@@ -416,12 +409,12 @@ export class Room {
     };
 
     this.onMatchFinished(payload);
-    // also broadcast final state
+
     this.broadcastState(this.getSerializedState());
   }
 
   // ---------------------------
-  // State Serialization
+  // Serialized State
   // ---------------------------
 
   public getSerializedState(): SerializedGameState {
@@ -459,7 +452,7 @@ export class Room {
 }
 
 // ---------------------------
-// Room Registry (global map)
+// Room Registry
 // ---------------------------
 
 export const rooms = new Map<string, Room>();
