@@ -3,22 +3,22 @@
 //
 
 // ---------------------------
-// Game State & Core Constants
+// Sides & Difficulty
 // ---------------------------
 
 export type PlayerSide = "left" | "right";
+
 export type AiDifficulty = "easy" | "medium" | "hard";
 
-
 export type GameState =
-  | "waiting"     // room created, waiting for players
-  | "starting"    // both players are present; serve countdown running
-  | "playing"     // ball is in motion
-  | "paused"      // after a goal, before next serve
-  | "finished";   // match ended
+  | "waiting"
+  | "starting"
+  | "playing"
+  | "paused"
+  | "finished";
 
 // ---------------------------
-// Geometry Types
+// Geometry
 // ---------------------------
 
 export interface Vec2 {
@@ -27,8 +27,8 @@ export interface Vec2 {
 }
 
 export interface PaddleState {
-  y: number;        // paddle Y position
-  height: number;   // paddle height (default: 100)
+  y: number;
+  height: number;
 }
 
 export interface BallState {
@@ -37,7 +37,7 @@ export interface BallState {
 }
 
 // ---------------------------
-// Score & Match Tracking
+// Score & Config
 // ---------------------------
 
 export interface ScoreState {
@@ -49,38 +49,35 @@ export interface MatchConfig {
   scoreLimit: number;
   allowSpectators: boolean;
   enableAi: boolean;
-  aiDifficulty?: AiDifficulty;  // 👈 new
+  aiDifficulty?: AiDifficulty;      // ⭐ Used by Room.addAi()
   tournamentId?: number;
 }
 
-
 // ---------------------------
-// Player Identity in Room
+// Room Players
 // ---------------------------
 
-// Sent from frontend → backend when joining a match
 export interface JoinPayload {
   matchId: string;
-  userId: number | null;       // null = guest
+  userId: number | null;            // null = guest
   displayName: string;
   avatarUrl?: string;
-  side?: PlayerSide | null;    // optional: client may suggest, but server decides
+  side?: PlayerSide | null;
 }
 
-// Stored internally in the Room
 export interface RoomPlayer {
-  socketId: string;            // socket.io id
-  userId: number | null;       // permanent ID or null for guests
+  socketId: string;
+  userId: number | null;
   displayName: string;
   avatarUrl?: string;
-  side: PlayerSide;            // left or right
-  isAi: boolean;               // AI-controlled?
-  connected: boolean;          // for disconnect/reconnect logic
-  disconnectTimer?: NodeJS.Timeout; // grace timer if disconnected
+  side: PlayerSide;
+  isAi: boolean;
+  connected: boolean;
+  disconnectTimer?: NodeJS.Timeout;
 }
 
 // ---------------------------
-// Player Inputs (authoritative server-side)
+// Inputs
 // ---------------------------
 
 export interface PlayerInput {
@@ -89,7 +86,7 @@ export interface PlayerInput {
 }
 
 // ---------------------------
-// Serialized Game State (sent to frontend)
+// Serialized State → Sent to client
 // ---------------------------
 
 export interface SerializedGameState {
@@ -124,4 +121,3 @@ export interface SerializedGameState {
     tournamentId?: number;
   };
 }
-
