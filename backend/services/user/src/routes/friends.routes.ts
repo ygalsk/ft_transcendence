@@ -1,6 +1,11 @@
 import { FastifyInstance } from 'fastify';
-import { AddFriendSchema, AddFriendType } from '../../shared/schemas/friends.schema';
+import { AddFriendSchema,
+        AddFriendType,
+        FriendActionSchema,
+        FriendActionType
+} from '../../shared/schemas/friends.schema';
 
+// user->sender, friend->recipient
 interface Friendship {
     id: number;
     user_id: number;
@@ -35,7 +40,7 @@ export default async function friendsRoutes(fastify: FastifyInstance) {
             const existingFriendship = fastify.db.prepare(`
                 SELECT id, status FROM friendships 
                 WHERE (user_id = ? AND friend_id = ?) 
-                OR (user_id = ? AND friend_id = ?)
+                   OR (user_id = ? AND friend_id = ?)
             `).get(senderId, friend_id, friend_id, senderId) as Friendship | undefined;
 
             if (existingFriendship) {
@@ -60,6 +65,62 @@ export default async function friendsRoutes(fastify: FastifyInstance) {
         } catch (error: any) {
            fastify.log.error({ error: error.message }, 'Failed to send friend request');
            return reply.code(500).send({ error: 'Internal server error' });
+        }
+    });
+
+    //patch /friends/:friendshioID - accept/decline request
+    fastify.patch<{
+        Params: { friendshipId: string },
+        Body: FriendActionType
+    }>('/friends/:friendshipId', {
+        schema : { body: FriendActionSchema},
+        preHandler: [fastify.authenticate]
+    }, async (request, reply) => {
+        const userId = request.user!.userId;
+        const friendshipId = parseInt(request.params.friendshipId, 10);
+        const { action } = request.body;
+
+        if (isNaN(friendshipId))
+            return reply.code(400).send({ error: 'Invalid friendship ID format'});
+
+        try {
+            const friendship = fastify.db.prepare(`
+                SELECT id, user_id, friend_id, status 
+                FROM friendships 
+                WHERE id = ?
+            `).get(friendshipId) as Friendship | undefined;
+
+            if (!friendship)
+                return reply.code(404).send({ error: 'Friend request not found'});
+
+            if (friendship.friend_id !== userId)
+                return reply.code(403).send({ error: 'Can only respond to requests sent to you'});
+
+            if (friendship.status !== 'pending')
+                return reply.code(400).send({ error: 'Can only respond to pending friend requests' });
+        
+            if (action === 'accept') {
+                // Accept the friendship
+                fastify.db.prepare(`
+                    UPDATE friendships 
+                    SET status = 'accepted' 
+                    WHERE id = ?
+                `).run(friendshipId);
+
+                fastify.log.info({ friendshipId, userId }, 'Friend request accepted');
+                return reply.send({ message: 'Friend request accepted successfully'});
+            } else if (action === 'decline') {
+                // Delete the friendship request
+                fastify.db.prepare('DELETE FROM friendships WHERE id = ?').run(friendshipId);
+                fastify.log.info({ friendshipId, userId }, 'Friend request declined');
+               
+                return reply.send({ message: 'Friend request declined' });           
+            } else
+                return reply.code(400).send({ error: 'Invalid action. Use "accept" or "decline"' });
+
+        } catch (error: any) {
+            fastify.log.error({ error: error.message, friendshipId, userId }, 'Failed to update friendship');
+            return reply.code(500).send({ error: 'Internal server error' });
         }
     });
 }
