@@ -5,9 +5,14 @@ import { join } from 'path';
 import dbPlugin from '../shared/plugins/db';
 import authPlugin from '../shared/plugins/auth';
 import prometheusPlugin from '../shared/plugins/prometheus';
-import swaggerPlugin from '../shared/plugins/swagger'
+import swaggerPlugin from '../shared/plugins/swagger';
+
 import userRoutes from './routes/user.routes';
 import internalRoutes from './routes/internal.routes';
+
+// 👇 ADD THESE TWO IMPORTS
+import tournamentRoutes from './routes/tournament.routes';
+import internalTournamentRoutes from './routes/internal.tournament.routes';
 
 export function buildApp() {
   const app = fastify({ logger: true }).withTypeProvider<TypeBoxTypeProvider>();
@@ -24,15 +29,24 @@ export function buildApp() {
   // Prometheus metrics
   app.register(prometheusPlugin);
 
-    // Swagger
+  // Swagger
   app.register(swaggerPlugin, {
     serviceName: 'User Service',
     serverUrl: '/api/user'
   });
 
-  // Routes
+  // Public user routes
   app.register(userRoutes);
+
+  // Internal user routes
   app.register(internalRoutes, { prefix: '/internal' });
+
+  // ⭐ NEW: public tournament routes (e.g. /tournaments, /tournaments/:id)
+  app.register(tournamentRoutes, { prefix: '/tournaments' });
+
+  // ⭐ NEW: internal tournament routes (called from pong-service)
+  // URLs like: /internal/tournaments/...
+  app.register(internalTournamentRoutes, { prefix: '/internal/tournaments' });
 
   // Health check
   app.get('/health', async () => {

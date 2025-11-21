@@ -1,9 +1,13 @@
-import type { Database } from 'better-sqlite3';
+import type { Database } from "better-sqlite3";
+import type { FastifyRequest, FastifyReply } from "fastify";
 
-declare module 'fastify' {
+declare module "fastify" {
   interface FastifyInstance {
     db: Database;
-    authenticate: any;
+
+    // Auth decorators injected by shared/plugins/auth.ts
+    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    authenticateService: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
 
   interface FastifyRequest {
@@ -11,5 +15,8 @@ declare module 'fastify' {
       userId: number;
       email: string;
     };
+
+    // For inter-service auth (set by authenticateService)
+    service?: string;
   }
 }
