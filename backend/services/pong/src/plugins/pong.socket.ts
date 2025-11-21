@@ -142,8 +142,6 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
         );
         return;
 }
-
-
         //
         // 🤝 Human vs Human casual matchmaking
         //
