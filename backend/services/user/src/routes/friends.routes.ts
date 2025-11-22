@@ -4,6 +4,7 @@ import { AddFriendSchema,
         FriendActionSchema,
         FriendActionType
 } from '../../shared/schemas/friends.schema';
+import { error } from 'console';
 
 // user->sender, friend->recipient
 interface Friendship {
@@ -24,7 +25,7 @@ export default async function friendsRoutes(fastify: FastifyInstance) {
         const senderId = request.user!.userId;
         const { friend_id } = request.body;
 
-        // Prevent self-friendship
+        // Prevent self-friendship 
         if (senderId === friend_id)
             return reply.code(400).send({ error: 'Cannot send friend request to yourself' });
 
@@ -68,7 +69,7 @@ export default async function friendsRoutes(fastify: FastifyInstance) {
         }
     });
 
-    //patch /friends/:friendshioID - accept/decline request
+    //patch /friends/:friendshioID - accept frienship request
     fastify.patch<{
         Params: { friendshipId: string },
         Body: FriendActionType
@@ -109,17 +110,51 @@ export default async function friendsRoutes(fastify: FastifyInstance) {
 
                 fastify.log.info({ friendshipId, userId }, 'Friend request accepted');
                 return reply.send({ message: 'Friend request accepted successfully'});
-            } else if (action === 'decline') {
-                // Delete the friendship request
-                fastify.db.prepare('DELETE FROM friendships WHERE id = ?').run(friendshipId);
-                fastify.log.info({ friendshipId, userId }, 'Friend request declined');
-               
-                return reply.send({ message: 'Friend request declined' });           
             } else
                 return reply.code(400).send({ error: 'Invalid action. Use "accept" or "decline"' });
 
         } catch (error: any) {
             fastify.log.error({ error: error.message, friendshipId, userId }, 'Failed to update friendship');
+            return reply.code(500).send({ error: 'Internal server error' });
+        }
+    });
+
+    //delete /friends/:friendId -remove friend, cancel/decline request
+    fastify.delete<{ Params: {friendId: string}}>('/friends/:friendId',{
+        preHandler: [fastify.authenticate]
+    }, async (request, reply) => {
+        const userId = request.user!.userId;
+        const friendId = parseInt(request.params.friendId, 10);
+
+        if (isNaN(friendId))
+            return reply.code(400).send({ error: 'Invalid friend ID format'});
+        try {
+            const friendship = fastify.db.prepare(`
+                SELECT id, user_id, friend_id, status 
+                FROM friendships 
+                WHERE (user_id = ? AND friend_id = ?) 
+                   OR (user_id = ? AND friend_id = ?)
+            `).get(userId, friendId, friendId, userId) as Friendship | undefined;
+
+            if (!friendship)
+                return reply.code(404).send({ error: 'Friendship not found'});
+
+            fastify.db.prepare('DELETE FROM friendships WHERE id = ?').run(friendship.id);
+
+            const action = friendship.status === 'pending' 
+                ? (friendship.user_id === userId ? 'canceled friend request' : 'declined friend request')
+                : 'removed friend';
+
+            fastify.log.info({ 
+                friendshipId: friendship.id, 
+                userId, 
+                friendId, 
+                action 
+            }, `Friendship ${action}`);
+
+            return reply.code(204).send();
+        } catch (error: any) {
+            fastify.log.error({ error: error.message, userId, friendId }, 'Failed to remove friendship');
             return reply.code(500).send({ error: 'Internal server error' });
         }
     });
