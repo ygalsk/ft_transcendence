@@ -9,7 +9,6 @@ export const AddFriendSchema = Type.Object({
 export const FriendActionSchema = Type.Object({
     action: Type.Union([
         Type.Literal('accept'),
-        Type.Literal('decline')
     ])
 });
 

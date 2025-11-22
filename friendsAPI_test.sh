@@ -82,7 +82,7 @@ RESPONSE=$(make_request "POST" "$BASE_URL/api/auth/login" "" '{"email": "bob@tes
 BOB_TOKEN=$(extract_body "$RESPONSE" | jq -r '.token // empty')
 [[ -n "$BOB_TOKEN" && "$BOB_TOKEN" != "null" ]] || { echo "Bob login failed"; exit 1; }
 
-# Login Charlie
+# Login Charlie - FIXED
 RESPONSE=$(make_request "POST" "$BASE_URL/api/auth/login" "" '{"email": "charlie@test.com", "password": "password123"}')
 CHARLIE_TOKEN=$(extract_body "$RESPONSE" | jq -r '.token // empty')
 [[ -n "$CHARLIE_TOKEN" && "$CHARLIE_TOKEN" != "null" ]] || { echo "Charlie login failed"; exit 1; }
@@ -135,67 +135,109 @@ print_result "Friend request without friend_id" "$(extract_status "$RESPONSE")" 
 RESPONSE=$(make_request "POST" "$BASE_URL/api/user/friends" "$ALICE_TOKEN" '{"friend_id": "invalid"}')
 print_result "Friend request with invalid friend_id type" "$(extract_status "$RESPONSE")" "400" "$(extract_body "$RESPONSE")"
 
-echo -e "\n${BLUE}✅ Testing Friend Request Responses - Valid Cases${NC}"
+echo -e "\n${BLUE}✅ Testing Friend Request Accept - Valid Cases${NC}"
 
 # Bob accepts Alice's request
 RESPONSE=$(make_request "PATCH" "$BASE_URL/api/user/friends/$FRIENDSHIP_ID_1" "$BOB_TOKEN" '{"action": "accept"}')
 print_result "Accept friend request (Bob accepts Alice)" "$(extract_status "$RESPONSE")" "200" "$(extract_body "$RESPONSE")"
 
-# Alice declines Charlie's request  
-RESPONSE=$(make_request "PATCH" "$BASE_URL/api/user/friends/$FRIENDSHIP_ID_2" "$ALICE_TOKEN" '{"action": "decline"}')
-print_result "Decline friend request (Alice declines Charlie)" "$(extract_status "$RESPONSE")" "200" "$(extract_body "$RESPONSE")"
-
-echo -e "\n${BLUE}❌ Testing Friend Request Responses - Invalid Cases${NC}"
+echo -e "\n${BLUE}❌ Testing Friend Request Accept - Invalid Cases${NC}"
 
 # Try to accept already accepted request
 RESPONSE=$(make_request "PATCH" "$BASE_URL/api/user/friends/$FRIENDSHIP_ID_1" "$BOB_TOKEN" '{"action": "accept"}')
 print_result "Accept already accepted request" "$(extract_status "$RESPONSE")" "400" "$(extract_body "$RESPONSE")"
 
-# Try to respond to deleted request
-RESPONSE=$(make_request "PATCH" "$BASE_URL/api/user/friends/$FRIENDSHIP_ID_2" "$ALICE_TOKEN" '{"action": "accept"}')
-print_result "Respond to deleted request" "$(extract_status "$RESPONSE")" "404" "$(extract_body "$RESPONSE")"
-
 # Non-existent friendship ID
 RESPONSE=$(make_request "PATCH" "$BASE_URL/api/user/friends/999" "$BOB_TOKEN" '{"action": "accept"}')
-print_result "Respond to non-existent friendship" "$(extract_status "$RESPONSE")" "404" "$(extract_body "$RESPONSE")"
+print_result "Accept non-existent friendship" "$(extract_status "$RESPONSE")" "404" "$(extract_body "$RESPONSE")"
 
 # Invalid friendship ID format
 RESPONSE=$(make_request "PATCH" "$BASE_URL/api/user/friends/invalid" "$BOB_TOKEN" '{"action": "accept"}')
 print_result "Invalid friendship ID format" "$(extract_status "$RESPONSE")" "400" "$(extract_body "$RESPONSE")"
 
-# Wrong user trying to respond
-RESPONSE=$(make_request "POST" "$BASE_URL/api/user/friends" "$BOB_TOKEN" '{"friend_id": 3}')
-BOB_TO_CHARLIE=$(extract_body "$RESPONSE" | jq -r '.friendship_id // empty')
-RESPONSE=$(make_request "PATCH" "$BASE_URL/api/user/friends/$BOB_TO_CHARLIE" "$ALICE_TOKEN" '{"action": "accept"}')
-print_result "Wrong user responding to request" "$(extract_status "$RESPONSE")" "403" "$(extract_body "$RESPONSE")"
+# Wrong user trying to accept (Alice trying to accept Charlie's request to Alice)
+RESPONSE=$(make_request "PATCH" "$BASE_URL/api/user/friends/$FRIENDSHIP_ID_2" "$CHARLIE_TOKEN" '{"action": "accept"}')
+print_result "Wrong user trying to accept" "$(extract_status "$RESPONSE")" "403" "$(extract_body "$RESPONSE")"
 
-# Invalid action
-RESPONSE=$(make_request "PATCH" "$BASE_URL/api/user/friends/$BOB_TO_CHARLIE" "$CHARLIE_TOKEN" '{"action": "invalid"}')
-print_result "Invalid action type" "$(extract_status "$RESPONSE")" "400" "$(extract_body "$RESPONSE")"
+# Invalid action (decline no longer supported)
+RESPONSE=$(make_request "PATCH" "$BASE_URL/api/user/friends/$FRIENDSHIP_ID_2" "$ALICE_TOKEN" '{"action": "decline"}')
+print_result "Invalid action (decline not supported)" "$(extract_status "$RESPONSE")" "400" "$(extract_body "$RESPONSE")"
 
 # Missing action
-RESPONSE=$(make_request "PATCH" "$BASE_URL/api/user/friends/$BOB_TO_CHARLIE" "$CHARLIE_TOKEN" '{}')
+RESPONSE=$(make_request "PATCH" "$BASE_URL/api/user/friends/$FRIENDSHIP_ID_2" "$ALICE_TOKEN" '{}')
 print_result "Missing action field" "$(extract_status "$RESPONSE")" "400" "$(extract_body "$RESPONSE")"
 
-# No authentication for response
-RESPONSE=$(make_request "PATCH" "$BASE_URL/api/user/friends/$BOB_TO_CHARLIE" "" '{"action": "accept"}')
-print_result "Respond without authentication" "$(extract_status "$RESPONSE")" "401" "$(extract_body "$RESPONSE")"
+# No authentication for accept
+RESPONSE=$(make_request "PATCH" "$BASE_URL/api/user/friends/$FRIENDSHIP_ID_2" "" '{"action": "accept"}')
+print_result "Accept without authentication" "$(extract_status "$RESPONSE")" "401" "$(extract_body "$RESPONSE")"
+
+echo -e "\n${BLUE}🗑️ Testing Friend Removal/Decline - Valid Cases${NC}"
+
+# Alice declines Charlie's request using DELETE
+RESPONSE=$(make_request "DELETE" "$BASE_URL/api/user/friends/3" "$ALICE_TOKEN" "")
+print_result "Decline friend request via DELETE (Alice declines Charlie)" "$(extract_status "$RESPONSE")" "204" ""
+
+# Create new requests for removal testing
+RESPONSE=$(make_request "POST" "$BASE_URL/api/user/friends" "$BOB_TOKEN" '{"friend_id": 3}')
+BOB_TO_CHARLIE_ID=$(extract_body "$RESPONSE" | jq -r '.friendship_id // empty')
+
+# Bob cancels his own pending request
+RESPONSE=$(make_request "DELETE" "$BASE_URL/api/user/friends/3" "$BOB_TOKEN" "")
+print_result "Cancel own pending request" "$(extract_status "$RESPONSE")" "204" ""
+
+# Alice removes Bob (they're already friends from earlier)
+RESPONSE=$(make_request "DELETE" "$BASE_URL/api/user/friends/2" "$ALICE_TOKEN" "")
+print_result "Remove accepted friend" "$(extract_status "$RESPONSE")" "204" ""
+
+echo -e "\n${BLUE}❌ Testing Friend Removal/Decline - Invalid Cases${NC}"
+
+# Try to remove non-existent friendship
+RESPONSE=$(make_request "DELETE" "$BASE_URL/api/user/friends/2" "$ALICE_TOKEN" "")
+print_result "Remove non-existent friendship" "$(extract_status "$RESPONSE")" "404" "$(extract_body "$RESPONSE")"
+
+# Invalid friend ID format
+RESPONSE=$(make_request "DELETE" "$BASE_URL/api/user/friends/invalid" "$ALICE_TOKEN" "")
+print_result "Invalid friend ID format" "$(extract_status "$RESPONSE")" "400" "$(extract_body "$RESPONSE")"
+
+# No authentication
+RESPONSE=$(make_request "DELETE" "$BASE_URL/api/user/friends/2" "" "")
+print_result "Remove friend without authentication" "$(extract_status "$RESPONSE")" "401" "$(extract_body "$RESPONSE")"
+
+# Invalid token
+RESPONSE=$(make_request "DELETE" "$BASE_URL/api/user/friends/2" "invalid-token" "")
+print_result "Remove friend with invalid token" "$(extract_status "$RESPONSE")" "401" "$(extract_body "$RESPONSE")"
 
 echo -e "\n${BLUE}🔄 Testing Edge Cases${NC}"
 
-# Try reverse friend request (Bob → Alice when Alice → Bob already accepted)
+# Create fresh friendship for edge case testing
+RESPONSE=$(make_request "POST" "$BASE_URL/api/user/friends" "$ALICE_TOKEN" '{"friend_id": 2}')
+ALICE_TO_BOB_NEW=$(extract_body "$RESPONSE" | jq -r '.friendship_id // empty')
+
+# Bob accepts
+RESPONSE=$(make_request "PATCH" "$BASE_URL/api/user/friends/$ALICE_TO_BOB_NEW" "$BOB_TOKEN" '{"action": "accept"}')
+
+# Try reverse friend request (should fail - already friends)
 RESPONSE=$(make_request "POST" "$BASE_URL/api/user/friends" "$BOB_TOKEN" '{"friend_id": 1}')
 print_result "Reverse friend request (already friends)" "$(extract_status "$RESPONSE")" "409" "$(extract_body "$RESPONSE")"
 
-# Create a fresh request for proper testing
-echo -e "\n${BLUE}✅ Testing Valid Accept on Fresh Request${NC}"
-RESPONSE=$(make_request "POST" "$BASE_URL/api/user/friends" "$ALICE_TOKEN" '{"friend_id": 3}')
-ALICE_TO_CHARLIE=$(extract_body "$RESPONSE" | jq -r '.friendship_id // empty')
-print_result "Create fresh request (Alice → Charlie)" "$(extract_status "$RESPONSE")" "201" "$(extract_body "$RESPONSE")"
+echo -e "\n${BLUE}✅ Testing Complete Friendship Lifecycle${NC}"
 
-# Charlie accepts this fresh request
-RESPONSE=$(make_request "PATCH" "$BASE_URL/api/user/friends/$ALICE_TO_CHARLIE" "$CHARLIE_TOKEN" '{"action": "accept"}')
-print_result "Accept valid pending request" "$(extract_status "$RESPONSE")" "200" "$(extract_body "$RESPONSE")"
+# Charlie sends request to Bob
+RESPONSE=$(make_request "POST" "$BASE_URL/api/user/friends" "$CHARLIE_TOKEN" '{"friend_id": 2}')
+CHARLIE_TO_BOB_ID=$(extract_body "$RESPONSE" | jq -r '.friendship_id // empty')
+print_result "Create new request (Charlie → Bob)" "$(extract_status "$RESPONSE")" "201" "$(extract_body "$RESPONSE")"
+
+# Bob accepts Charlie's request
+RESPONSE=$(make_request "PATCH" "$BASE_URL/api/user/friends/$CHARLIE_TO_BOB_ID" "$BOB_TOKEN" '{"action": "accept"}')
+print_result "Accept friend request (Bob accepts Charlie)" "$(extract_status "$RESPONSE")" "200" "$(extract_body "$RESPONSE")"
+
+# Charlie removes Bob as friend
+RESPONSE=$(make_request "DELETE" "$BASE_URL/api/user/friends/2" "$CHARLIE_TOKEN" "")
+print_result "Remove friend (Charlie removes Bob)" "$(extract_status "$RESPONSE")" "204" ""
 
 echo -e "\n${BLUE}🎉 Friends API Testing Complete!${NC}"
-echo "==================================" 
+echo "=================================="
+echo -e "${GREEN}New API Design:${NC}"
+echo -e "  • POST /friends - Send friend request"
+echo -e "  • PATCH /friends/:id {\"action\": \"accept\"} - Accept request only"
+echo -e "  • DELETE /friends/:id - Decline, cancel, or remove friend"
