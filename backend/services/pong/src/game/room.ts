@@ -35,12 +35,14 @@ export type MatchEndReason = "normal" | "disconnect" | "forfeit";
 export interface MatchFinishedPayload {
   matchId: string;
   tournamentId?: number;
+  tournamentMatchId?: number;   // ⭐ REQUIRED
   winnerSide: PlayerSide;
   score: ScoreState;
   leftPlayer: RoomPlayer | null;
   rightPlayer: RoomPlayer | null;
   reason: MatchEndReason;
 }
+
 
 // ---------------------------
 // Room constants
@@ -401,13 +403,13 @@ export class Room {
     const payload: MatchFinishedPayload = {
       matchId: this.id,
       tournamentId: this.config.tournamentId,
+      tournamentMatchId: this.config.tournamentMatchId,  // ⭐ ADD THIS
       winnerSide,
       score: { ...this.score },
       leftPlayer: this.players.left,
       rightPlayer: this.players.right,
       reason,
-    };
-
+  };
     this.onMatchFinished(payload);
 
     this.broadcastState(this.getSerializedState());
