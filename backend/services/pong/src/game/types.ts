@@ -51,6 +51,7 @@ export interface MatchConfig {
   enableAi: boolean;
   aiDifficulty?: AiDifficulty;      // ⭐ Used by Room.addAi()
   tournamentId?: number;
+  tournamentMatchId?: number
 }
 
 // ---------------------------
