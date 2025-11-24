@@ -1,16 +1,21 @@
-//
-// src/plugins/pong.socket.ts — with AI difficulty + guest support
-//
+// services/pong/src/plugins/pong.socket.ts — with AI difficulty + guest + tournaments
 
 import fp from "fastify-plugin";
 import { FastifyInstance } from "fastify";
 import { Socket } from "socket.io";
 
 import { createRoom, getRoom, removeRoom, Room } from "../game/room";
-import { MatchConfig, PlayerSide, PlayerInput, AiDifficulty } from "../game/types";
+import {
+  MatchConfig,
+  PlayerSide,
+  PlayerInput,
+  AiDifficulty,
+} from "../game/types";
 import { generateServiceToken } from "../../shared/plugins/auth";
 
 const DEFAULT_SCORE_LIMIT = 11;
+const USER_SERVICE_URL =
+  process.env.USER_SERVICE_URL || "http://user-service:5000";
 
 // Simple casual matchmaking: only one waiting player for now
 let waitingSocket: Socket | null = null;
@@ -58,7 +63,7 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
         if (!user.display_name && user.userId !== null) {
           try {
             const res = await fetch(
-              `${process.env.USER_SERVICE_URL || "http://user-service:5000"}/users/${user.userId}`
+              `${USER_SERVICE_URL}/users/${user.userId}`
             );
             if (res.ok) {
               const data = (await res.json()) as { display_name?: string };
@@ -75,7 +80,11 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
         socket.data.user = user;
 
         fastify.log.info(
-          { socketId: socket.id, userId: user.userId, displayName: user.display_name },
+          {
+            socketId: socket.id,
+            userId: user.userId,
+            displayName: user.display_name,
+          },
           "Authenticated player connected via WebSocket"
         );
       }
@@ -91,134 +100,148 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
       socket.on(
         "join_casual",
         (payload?: { vsAi?: boolean; difficulty?: AiDifficulty }) => {
-        const vsAi = payload?.vsAi ?? false;
-        const difficulty: AiDifficulty = payload?.difficulty ?? "medium";
-        const displayName = getDisplayName(user!);
+          const vsAi = payload?.vsAi ?? false;
+          const difficulty: AiDifficulty = payload?.difficulty ?? "medium";
+          const displayName = getDisplayName(user!);
 
-      if (vsAi) {
-        const matchId = `casual-${socket.id}-${Date.now()}`;
+          if (vsAi) {
+            //
+            // 💻 Human vs AI
+            //
+            const matchId = `casual-${socket.id}-${Date.now()}`;
+            const config: MatchConfig = {
+              scoreLimit: DEFAULT_SCORE_LIMIT,
+              allowSpectators: true,
+              enableAi: true,
+              aiDifficulty: difficulty,
+            };
 
-        const config: MatchConfig = {
-          scoreLimit: DEFAULT_SCORE_LIMIT,
-          allowSpectators: true,
-          enableAi: true,
-          aiDifficulty: difficulty,
-        };
+            const room = setupRoom(fastify, matchId, config);
 
-        const room = setupRoom(fastify, matchId, config);
+            const side: PlayerSide | null = room.addHumanPlayer({
+              socketId: socket.id,
+              userId: user!.userId,
+              displayName,
+              avatarUrl: undefined,
+            });
 
-        const side: PlayerSide | null = room.addHumanPlayer({
-          socketId: socket.id,
-          userId: user!.userId,
-          displayName,
-          avatarUrl: undefined,
-        });
+            if (!side) {
+              fastify.log.error(
+                { matchId, userId: user!.userId },
+                "Failed to assign side in vsAi match"
+              );
+              socket.emit("error", { message: "Unable to join match" });
+              return;
+            }
 
-        if (!side) {
-          fastify.log.error({ matchId, userId: user!.userId }, "Failed to assign side in vsAi match");
-          socket.emit("error", { message: "Unable to join match" });
-          return;
-        }
+            const aiSide: PlayerSide = side === "left" ? "right" : "left";
 
-        const aiSide: PlayerSide = side === "left" ? "right" : "left";
+            room.addAi(aiSide, `AI (${difficulty})`, difficulty);
 
-        // 👇 Correct call
-        room.addAi(aiSide, `AI (${difficulty})`, difficulty);
+            socket.data.roomId = room.id;
+            socket.data.side = side;
+            socket.join(room.id);
 
-        socket.data.roomId = room.id;
-        socket.data.side = side;
-        socket.join(room.id);
+            socket.emit("match_start", {
+              matchId: room.id,
+              you: side,
+              opponent: `AI (${difficulty})`,
+              mode: "casual",
+            });
 
-        socket.emit("match_start", {
-          matchId: room.id,
-          you: side,
-          opponent: `AI (${difficulty})`,
-          mode: "casual",
-        });
-
-        fastify.log.info(
-          { roomId: room.id, playerSide: side, as: displayName, difficulty },
-          "Casual vs AI match started"
-        );
-        return;
-}
-        //
-        // 🤝 Human vs Human casual matchmaking
-        //
-        if (!waitingSocket) {
-          waitingSocket = socket;
-          socket.emit("waiting", { message: "🕐 Waiting for opponent..." });
-          fastify.log.info({ socketId: socket.id }, "Player added to matchmaking queue");
-        } else if (waitingSocket.id !== socket.id) {
-          const p1 = waitingSocket;
-          const p1User = p1.data.user as AuthUser;
-          waitingSocket = null;
-
-          const matchId = `casual-${p1.id}-${socket.id}-${Date.now()}`;
-          const config: MatchConfig = {
-            scoreLimit: DEFAULT_SCORE_LIMIT,
-            allowSpectators: true,
-            enableAi: false,
-          };
-
-          const room = setupRoom(fastify, matchId, config);
-
-          const p1Side = room.addHumanPlayer({
-            socketId: p1.id,
-            userId: p1User.userId,
-            displayName: getDisplayName(p1User),
-            avatarUrl: undefined,
-          });
-
-          const p2Side = room.addHumanPlayer({
-            socketId: socket.id,
-            userId: user!.userId,
-            displayName: getDisplayName(user!),
-            avatarUrl: undefined,
-          });
-
-          if (!p1Side || !p2Side) {
-            fastify.log.error({ matchId }, "Failed to assign sides in casual matchmaking");
-            p1.emit("error", { message: "Failed to create match" });
-            socket.emit("error", { message: "Failed to create match" });
+            fastify.log.info(
+              { roomId: room.id, playerSide: side, as: displayName, difficulty },
+              "Casual vs AI match started"
+            );
             return;
           }
 
-          p1.data.roomId = room.id;
-          p1.data.side = p1Side;
-          socket.data.roomId = room.id;
-          socket.data.side = p2Side;
+          //
+          // 🤝 Human vs Human casual matchmaking
+          //
+          if (!waitingSocket) {
+            waitingSocket = socket;
+            socket.emit("waiting", { message: "🕐 Waiting for opponent..." });
+            fastify.log.info(
+              { socketId: socket.id },
+              "Player added to matchmaking queue"
+            );
+          } else if (waitingSocket.id !== socket.id) {
+            const p1 = waitingSocket;
+            const p1User = p1.data.user as AuthUser;
+            waitingSocket = null;
 
-          p1.join(room.id);
-          socket.join(room.id);
+            const matchId = `casual-${p1.id}-${socket.id}-${Date.now()}`;
+            const config: MatchConfig = {
+              scoreLimit: DEFAULT_SCORE_LIMIT,
+              allowSpectators: true,
+              enableAi: false,
+            };
 
-          const left = room.players.left;
-          const right = room.players.right;
+            const room = setupRoom(fastify, matchId, config);
 
-          p1.emit("match_start", {
-            matchId: room.id,
-            you: p1Side,
-            opponent: p1Side === "left" ? right?.displayName : left?.displayName,
-            mode: "casual",
-          });
+            const p1Side = room.addHumanPlayer({
+              socketId: p1.id,
+              userId: p1User.userId,
+              displayName: getDisplayName(p1User),
+              avatarUrl: undefined,
+            });
 
-          socket.emit("match_start", {
-            matchId: room.id,
-            you: p2Side,
-            opponent: p2Side === "left" ? right?.displayName : left?.displayName,
-            mode: "casual",
-          });
+            const p2Side = room.addHumanPlayer({
+              socketId: socket.id,
+              userId: user!.userId,
+              displayName: getDisplayName(user!),
+              avatarUrl: undefined,
+            });
 
-          fastify.log.info(
-            {
-              roomId: room.id,
-              leftUserId: left?.userId,
-              rightUserId: right?.userId,
-            },
-            "Casual human-vs-human match started"
-          );
+            if (!p1Side || !p2Side) {
+              fastify.log.error(
+                { matchId },
+                "Failed to assign sides in casual matchmaking"
+              );
+              p1.emit("error", { message: "Failed to create match" });
+              socket.emit("error", { message: "Failed to create match" });
+              return;
+            }
+
+            p1.data.roomId = room.id;
+            p1.data.side = p1Side;
+            socket.data.roomId = room.id;
+            socket.data.side = p2Side;
+
+            p1.join(room.id);
+            socket.join(room.id);
+
+            const left = room.players.left;
+            const right = room.players.right;
+
+            p1.emit("match_start", {
+              matchId: room.id,
+              you: p1Side,
+              opponent:
+                p1Side === "left" ? right?.displayName : left?.displayName,
+              mode: "casual",
+            });
+
+            socket.emit("match_start", {
+              matchId: room.id,
+              you: p2Side,
+              opponent:
+                p2Side === "left" ? right?.displayName : left?.displayName,
+              mode: "casual",
+            });
+
+            fastify.log.info(
+              {
+                roomId: room.id,
+                leftUserId: left?.userId,
+                rightUserId: right?.userId,
+              },
+              "Casual human-vs-human match started"
+            );
+          }
         }
-      });
+      );
 
       // ------------------------
       // JOIN MATCH (tournament / direct)
@@ -226,7 +249,11 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
 
       socket.on(
         "join_match",
-        (payload: { matchId: string; scoreLimit?: number; tournamentId?: number }) => {
+        (payload: {
+          matchId: string;
+          scoreLimit?: number;
+          tournamentId?: number;
+        }) => {
           const { matchId, scoreLimit, tournamentId } = payload;
 
           if (!matchId) {
@@ -236,7 +263,9 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
 
           // Guests cannot join tournaments
           if (tournamentId && user!.userId === null) {
-            socket.emit("error", { message: "Guests cannot join tournaments" });
+            socket.emit("error", {
+              message: "Guests cannot join tournaments",
+            });
             return;
           }
 
@@ -261,6 +290,7 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
           });
 
           if (!side) {
+            // Spectator
             socket.data.roomId = room.id;
             socket.join(room.id);
             socket.emit("spectator_joined", {
@@ -287,7 +317,7 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
           });
 
           fastify.log.info(
-            { roomId: room.id, side, as: displayName },
+            { roomId: room.id, side, as: displayName, tournamentId },
             "Player joined match via join_match"
           );
         }
@@ -356,73 +386,67 @@ function setupRoom(
   };
 
   room.onMatchFinished = async (payload) => {
-    const { winnerSide, score, leftPlayer, rightPlayer, reason, tournamentId } = payload;
+  const {
+    matchId,
+    tournamentId,
+    tournamentMatchId,
+    winnerSide,
+    score,
+    leftPlayer,
+    rightPlayer,
+    reason,
+  } = payload;
 
-    const winner = winnerSide === "left" ? leftPlayer : rightPlayer;
-    const loser = winnerSide === "left" ? rightPlayer : leftPlayer;
+  const winner = winnerSide === "left" ? leftPlayer : rightPlayer;
+  const loser = winnerSide === "left" ? rightPlayer : leftPlayer;
 
-    fastify.log.info(
-      {
-        roomId: room.id,
-        winnerSide,
-        score,
-        reason,
-        tournamentId,
-        winnerUserId: winner?.userId,
-        loserUserId: loser?.userId,
-      },
-      "Match finished"
-    );
-
-    fastify.io.to(room.id).emit("match_end", {
+  fastify.log.info(
+    {
+      roomId: room.id,
+      matchId,
       winnerSide,
       score,
       reason,
-      players: {
-        left: leftPlayer && {
-          displayName: leftPlayer.displayName,
-          userId: leftPlayer.userId,
-        },
-        right: rightPlayer && {
-          displayName: rightPlayer.displayName,
-          userId: rightPlayer.userId,
-        },
-      },
       tournamentId,
-    });
+      tournamentMatchId,
+      winnerUserId: winner?.userId,
+      loserUserId: loser?.userId,
+    },
+    "Match finished"
+  );
 
-    fastify.io.socketsLeave(room.id);
-    removeRoom(room.id);
+  // Notify players
+  fastify.io.to(room.id).emit("match_end", {
+    winnerSide,
+    score,
+    reason,
+    players: {
+      left: leftPlayer && {
+        displayName: leftPlayer.displayName,
+        userId: leftPlayer.userId,
+      },
+      right: rightPlayer && {
+        displayName: rightPlayer.displayName,
+        userId: rightPlayer.userId,
+      },
+    },
+    tournamentId,
+  });
 
-    // Persist only authenticated vs authenticated results
-    if (!winner?.userId || !loser?.userId) {
-      fastify.log.warn(
-        { roomId: room.id },
-        "Skipping match persistence — missing authenticated users"
-      );
-      return;
-    }
+  fastify.io.socketsLeave(room.id);
+  removeRoom(room.id);
 
-    try {
-      const insert = fastify.db.prepare(
-        `INSERT INTO matches (winner_id, loser_id, left_score, right_score, duration)
-         VALUES (?, ?, ?, ?, ?)`
-      );
-      insert.run(
-        winner.userId,
-        loser.userId,
-        score.left,
-        score.right,
-        null
-      );
-    } catch (err: any) {
-      fastify.log.error({ err: err.message }, "Failed to save match");
-    }
-
+  //
+  // ================
+  //  TOURNAMENT MATCH
+  // ================
+  //
+  if (tournamentId && tournamentMatchId) {
     try {
       const token = generateServiceToken("pong");
+
       const response = await fetch(
-        `${process.env.USER_SERVICE_URL || "http://user-service:5000"}/internal/match-result`,
+        `${USER_SERVICE_URL}/internal/tournament/match-complete`,
         {
           method: "POST",
           headers: {
@@ -430,13 +454,13 @@ function setupRoom(
             Authorization: `Service ${token}`,
           },
           body: JSON.stringify({
-            winnerId: winner.userId,
-            loserId: loser.userId,
+            tournamentId,
+            tournamentMatchId,
+            winnerId: winner?.userId ?? null,
+            leftPlayerId: leftPlayer?.userId ?? null,
+            rightPlayerId: rightPlayer?.userId ?? null,
             leftScore: score.left,
             rightScore: score.right,
-            tournamentId,
-            leftUserId: leftPlayer?.userId,
-            rightUserId: rightPlayer?.userId,
           }),
         }
       );
@@ -444,13 +468,75 @@ function setupRoom(
       if (!response.ok) {
         fastify.log.error(
           { status: response.status, statusText: response.statusText },
-          "Failed to report match to user service"
+          "Failed to report tournament match"
         );
+      } else {
+        fastify.log.info("Tournament match reported to user-service");
       }
     } catch (err: any) {
-      fastify.log.error({ err: err.message }, "Error reporting match result");
+      fastify.log.error(
+        { err: err.message },
+        "Error reporting tournament match"
+      );
     }
-  };
 
+    return; // <-- IMPORTANT: Stop here! Do NOT record as normal match.
+  }
+
+  //
+  // ================
+  //  NORMAL MATCH
+  // ================
+  //
+  if (winner?.userId && loser?.userId) {
+    try {
+      // Save locally
+      const insert = fastify.db.prepare(
+        `INSERT INTO matches (winner_id, loser_id, left_score, right_score, duration)
+         VALUES (?, ?, ?, ?, ?)`
+      );
+      insert.run(winner.userId, loser.userId, score.left, score.right, null);
+
+      fastify.log.info("Normal match stored locally");
+    } catch (err: any) {
+      fastify.log.error(
+        { err: err.message },
+        "Failed to save match locally"
+      );
+    }
+
+    try {
+      const token = generateServiceToken("pong");
+
+      const response = await fetch(`${USER_SERVICE_URL}/internal/match-result`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Service ${token}`,
+        },
+        body: JSON.stringify({
+          winnerId: winner.userId,
+          loserId: loser.userId,
+          leftScore: score.left,
+          rightScore: score.right,
+        }),
+      });
+
+      if (!response.ok) {
+        fastify.log.error(
+          { status: response.status, statusText: response.statusText },
+          "Failed to report normal match"
+        );
+      } else {
+        fastify.log.info("Normal match result reported to user-service");
+      }
+    } catch (err: any) {
+      fastify.log.error(
+        { err: err.message },
+        "Error reporting normal match"
+      );
+    }
+  }
+};
   return room;
 }
