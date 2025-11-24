@@ -2,9 +2,12 @@ import { FastifyInstance } from 'fastify';
 import { AddFriendSchema,
         AddFriendType,
         FriendActionSchema,
-        FriendActionType
+        FriendActionType,
+        PendingFriendshipSchema,
+        PendingFriendshipType,
+        FriendListSchema,
+        FriendListType
 } from '../../shared/schemas/friends.schema';
-import { error } from 'console';
 
 // user->sender, friend->recipient
 interface Friendship {
@@ -155,6 +158,96 @@ export default async function friendsRoutes(fastify: FastifyInstance) {
             return reply.code(204).send();
         } catch (error: any) {
             fastify.log.error({ error: error.message, userId, friendId }, 'Failed to remove friendship');
+            return reply.code(500).send({ error: 'Internal server error' });
+        }
+    });
+
+    //get /friends/requests - pending incoming-outgoing friend requests
+    fastify.get<{ Reply: PendingFriendshipType | { error: string } }>('/friends/requests', {
+        schema: {
+            response: { 200: PendingFriendshipSchema }
+        },
+        preHandler: [fastify.authenticate]
+    }, async (request, reply) => {
+        const userId = request.user!.userId;
+
+        try {
+            // get requests sent TO this user
+            const incomingRequests = fastify.db.prepare(`
+                SELECT 
+                    f.id,
+                    f.user_id as from_user_id,
+                    u.display_name as from_user_display_name,
+                    u.avatar_url,
+                    f.created_at
+                FROM friendships f
+                JOIN users u ON f.user_id = u.id
+                WHERE f.friend_id = ? AND f.status = 'pending'
+                ORDER BY f.created_at DESC
+            `).all(userId) as PendingFriendshipType['incoming'];
+
+            // get requests requests sent BY this user
+            const outgoingRequests = fastify.db.prepare(`
+                SELECT 
+                    f.id,
+                    f.friend_id as to_user_id,
+                    u.display_name as to_user_display_name,
+                    u.avatar_url,
+                    f.created_at
+                FROM friendships f
+                JOIN users u ON f.friend_id = u.id
+                WHERE f.user_id = ? AND f.status = 'pending'
+                ORDER BY f.created_at DESC
+            `).all(userId) as PendingFriendshipType['outgoing'];
+
+            return reply.send({
+                incoming: incomingRequests,
+                outgoing: outgoingRequests
+            });
+
+        } catch (error: any) {
+            fastify.log.error({ error: error.message, userId }, 'Failed to get pending requests');
+            return reply.code(500).send({ error: 'Internal server error' });
+        }
+    });
+
+    //get /friends - get all accepted friends
+    fastify.get<{ Reply: FriendListType | { error: string } }>('/friends', {
+        schema: {
+            response: { 200: FriendListSchema }
+        },
+        preHandler: [fastify.authenticate]
+    }, async (request, reply) => {
+        const userId = request.user!.userId;
+
+        try {
+            // get all accepted friendships where user is either sender or receiver
+            const accepted_friends = fastify.db.prepare(`
+                SELECT 
+                    u.id,
+                    u.display_name,
+                    u.avatar_url,
+                    u.online,
+                    u.last_seen,
+                    'accepted' as friendship_status
+                FROM friendships f
+                JOIN users u ON (
+                    CASE 
+                        WHEN f.user_id = ? THEN u.id = f.friend_id
+                        WHEN f.friend_id = ? THEN u.id = f.user_id
+                    END
+                )
+                WHERE f.status = 'accepted'
+                  AND (f.user_id = ? OR f.friend_id = ?)
+                ORDER BY u.display_name ASC
+            `).all(userId, userId, userId, userId) as FriendListType['friends'];
+
+            return reply.send({
+                friends: accepted_friends
+            });
+
+        } catch (error: any) {
+            fastify.log.error({ error: error.message, userId }, 'Failed to get friends list');
             return reply.code(500).send({ error: 'Internal server error' });
         }
     });
