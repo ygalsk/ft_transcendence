@@ -1,31 +1,41 @@
-// shared/schemas/tournament.schema.ts
 import { Type, Static } from "@sinclair/typebox";
 
-// POST /tournaments
+// ============================
+// Create Tournament
+// ============================
+
 export const CreateTournamentSchema = Type.Object({
-  name: Type.String({ minLength: 1, maxLength: 100 }),
-  max_players: Type.Number({ minimum: 2, maximum: 256 }),
+  name: Type.String({ minLength: 1, maxLength: 50 }),
+  max_players: Type.Integer({ minimum: 2, maximum: 128 }),
   is_public: Type.Optional(Type.Boolean()),
 });
 
 export type CreateTournamentType = Static<typeof CreateTournamentSchema>;
 
-// POST /tournaments/join
+// ============================
+// Join Tournament (with alias)
+// ============================
+
 export const JoinTournamentSchema = Type.Object({
-  tournamentId: Type.Number(),
+  tournamentId: Type.Integer({ minimum: 1 }),
+  alias: Type.String({ minLength: 1, maxLength: 32 }), // ⭐ NEW
 });
 
 export type JoinTournamentType = Static<typeof JoinTournamentSchema>;
 
-// POST /internal/tournament/match-complete
+// ============================
+// Internal: match-complete
+// Called by pong-service
+// ============================
+
 export const TournamentMatchCompleteSchema = Type.Object({
-  tournamentId: Type.Number(),
-  pongMatchId: Type.String(),      // 👈 links to tournament_matches.pong_match_id
-  winnerId: Type.Number(),
-  leftPlayerId: Type.Number(),
-  rightPlayerId: Type.Number(),
-  leftScore: Type.Number({ minimum: 0 }),
-  rightScore: Type.Number({ minimum: 0 }),
+  tournamentId: Type.Integer(),
+  tournamentMatchId: Type.Integer(),
+  winnerId: Type.Integer(),
+  leftPlayerId: Type.Integer(),
+  rightPlayerId: Type.Integer(),
+  leftScore: Type.Integer(),
+  rightScore: Type.Integer(),
 });
 
 export type TournamentMatchCompleteType = Static<

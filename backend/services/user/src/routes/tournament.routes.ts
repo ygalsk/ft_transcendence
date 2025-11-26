@@ -324,4 +324,5 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
       matches: enriched,
     });
   });
+
 }
