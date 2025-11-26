@@ -28,18 +28,25 @@
       cursor: pointer;
       border-radius: 6px;
     }
-    .btn:hover {
-      background: #187bcd;
-    }
+    .btn:hover { background: #187bcd; }
   </style>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+  <!-- ⭐ NEW: detect tournament params early -->
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    window.IS_TOURNAMENT = params.has("tId") && params.has("mId");
+  </script>
+
   <script defer src="./pong.js"></script>
 </head>
 <body>
-  <h1>Pong Test Page</h1>
 
-  <div>
+  <h1>Pong</h1>
+
+  <!-- ⭐ NEW: hide casual buttons when in tournament mode -->
+  <div id="casualControls" style="display: none;">
     <button id="btn_ai" class="btn">Play vs AI</button>
     <button id="btn_human" class="btn">Play vs Human</button>
   </div>
@@ -47,5 +54,13 @@
   <canvas id="gameCanvas" width="800" height="500"></canvas>
 
   <div id="status"></div>
+
+  <script>
+    // ⭐ NEW: show casual controls only when not in tournament mode
+    if (!window.IS_TOURNAMENT) {
+      document.getElementById("casualControls").style.display = "block";
+    }
+  </script>
+
 </body>
 </html>

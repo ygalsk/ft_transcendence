@@ -1,15 +1,15 @@
-// services/user/src/routes/internal.tournament.routes.ts
-
 import { FastifyInstance } from "fastify";
 import {
   TournamentMatchCompleteSchema,
   TournamentMatchCompleteType,
 } from "../../../shared/schemas/tournament.schema";
 
-export default async function internalTournamentRoutes(fastify: FastifyInstance) {
-  //
-  // Helper: advance a winner to their next match in the bracket
-  //
+export default async function internalTournamentRoutes(
+  fastify: FastifyInstance
+) {
+  // ============================================================
+  // Helper: advance a winner into their correct next-round match
+  // ============================================================
   function advanceWinnerToNextMatch(
     tournamentId: number,
     round: number,
@@ -18,10 +18,9 @@ export default async function internalTournamentRoutes(fastify: FastifyInstance)
   ) {
     const nextRound = round + 1;
     const nextIndex = Math.floor(matchIndex / 2);
-    const isLeftWinner = matchIndex % 2 === 0; // even → left slot, odd → right slot
+    const isLeftWinner = matchIndex % 2 === 0; // even → left slot
 
-    // See if next-round match already exists
-    const nextMatch = fastify.db
+    const existing = fastify.db
       .prepare(
         `SELECT id, left_player_id, right_player_id, status
          FROM tournament_matches
@@ -36,122 +35,80 @@ export default async function internalTournamentRoutes(fastify: FastifyInstance)
         }
       | undefined;
 
-    if (!nextMatch) {
-      // Create a new next-round match with winner in correct slot
-      const insertStmt = fastify.db.prepare(
-        `INSERT INTO tournament_matches
-         (tournament_id, round, match_index, left_player_id, right_player_id, status)
-         VALUES (?, ?, ?, ?, ?, 'pending')`
-      );
-
-      const leftId = isLeftWinner ? winnerId : null;
-      const rightId = isLeftWinner ? null : winnerId;
-
-      insertStmt.run(tournamentId, nextRound, nextIndex, leftId, rightId);
+    if (!existing) {
+      // Create next-round match with this winner on correct side
+      fastify.db
+        .prepare(
+          `INSERT INTO tournament_matches
+           (tournament_id, round, match_index, left_player_id, right_player_id)
+           VALUES (?, ?, ?, ?, ?)`
+        )
+        .run(
+          tournamentId,
+          nextRound,
+          nextIndex,
+          isLeftWinner ? winnerId : null,
+          isLeftWinner ? null : winnerId
+        );
       return;
     }
 
-    // Next match exists → put winner into left or right if that slot is free
+    // Update existing match only if slot is empty
     if (isLeftWinner) {
-      if (
-        nextMatch.left_player_id !== null &&
-        nextMatch.left_player_id !== winnerId
-      ) {
-        // Inconsistent bracket state; log and skip
-        fastify.log.warn(
-          {
-            tournamentId,
-            round,
-            matchIndex,
-            nextMatchId: nextMatch.id,
-            existing: nextMatch.left_player_id,
-            incoming: winnerId,
-          },
-          "Left slot already occupied in next match when advancing winner"
-        );
-        return;
+      if (existing.left_player_id == null) {
+        fastify.db
+          .prepare(
+            `UPDATE tournament_matches
+             SET left_player_id = ?
+             WHERE id = ?`
+          )
+          .run(winnerId, existing.id);
       }
-
-      fastify.db
-        .prepare(
-          `UPDATE tournament_matches
-           SET left_player_id = ?
-           WHERE id = ?`
-        )
-        .run(winnerId, nextMatch.id);
     } else {
-      if (
-        nextMatch.right_player_id !== null &&
-        nextMatch.right_player_id !== winnerId
-      ) {
-        fastify.log.warn(
-          {
-            tournamentId,
-            round,
-            matchIndex,
-            nextMatchId: nextMatch.id,
-            existing: nextMatch.right_player_id,
-            incoming: winnerId,
-          },
-          "Right slot already occupied in next match when advancing winner"
-        );
-        return;
+      if (existing.right_player_id == null) {
+        fastify.db
+          .prepare(
+            `UPDATE tournament_matches
+             SET right_player_id = ?
+             WHERE id = ?`
+          )
+          .run(winnerId, existing.id);
       }
-
-      fastify.db
-        .prepare(
-          `UPDATE tournament_matches
-           SET right_player_id = ?
-           WHERE id = ?`
-        )
-        .run(winnerId, nextMatch.id);
     }
   }
 
-  //
-  // Helper: repeatedly auto-finish BYE matches:
-  //  - pending matches where exactly ONE player is set
-  //  - winner is that player, then advanced forward
-  //
+  // ============================================================
+  // Helper: Auto-finish BYE matches (only one player)
+  // ============================================================
   function autoAdvanceByes(tournamentId: number) {
-    const selectByesStmt = fastify.db.prepare(
+    const findByes = fastify.db.prepare(
       `SELECT id, round, match_index, left_player_id, right_player_id
        FROM tournament_matches
        WHERE tournament_id = ?
          AND status = 'pending'
          AND (
-           (left_player_id IS NOT NULL AND right_player_id IS NULL) OR
+           (left_player_id IS NOT NULL AND right_player_id IS NULL)
+           OR
            (left_player_id IS NULL AND right_player_id IS NOT NULL)
          )
        ORDER BY round ASC, match_index ASC`
     );
 
-    const finishByeStmt = fastify.db.prepare(
+    const finishBye = fastify.db.prepare(
       `UPDATE tournament_matches
        SET winner_id = ?, status = 'finished', finished_at = CURRENT_TIMESTAMP
        WHERE id = ?`
     );
 
-    // Loop until there are no more BYEs that can be auto-advanced
-    // (important when multiple rounds in a row generate BYEs).
-    // This is safe because every iteration finishes at least one match,
-    // so it cannot loop forever.
     for (;;) {
-      const byeMatches = selectByesStmt.all(tournamentId) as Array<{
-        id: number;
-        round: number;
-        match_index: number;
-        left_player_id: number | null;
-        right_player_id: number | null;
-      }>;
+      const byes = findByes.all(tournamentId) as any[];
+      if (!byes.length) break;
 
-      if (!byeMatches.length) break;
+      for (const m of byes) {
+        const winnerId = m.left_player_id ?? m.right_player_id;
 
-      for (const m of byeMatches) {
-        const winnerId = m.left_player_id ?? m.right_player_id!;
-        finishByeStmt.run(winnerId, m.id);
+        finishBye.run(winnerId, m.id);
 
-        // Advance this winner into the next round
         advanceWinnerToNextMatch(
           tournamentId,
           m.round,
@@ -162,15 +119,10 @@ export default async function internalTournamentRoutes(fastify: FastifyInstance)
     }
   }
 
-  //
+  // ============================================================
   // POST /internal/tournament/match-complete
-  // Called by pong-service when a tournament match finishes.
-  // Responsibilities:
-  //  - mark match as finished
-  //  - advance winner into next match
-  //  - auto-resolve BYEs (if any)
-  //  - if no remaining matches → mark tournament as finished
-  //
+  // Called only by Pong service after a match ends
+  // ============================================================
   fastify.post<{ Body: TournamentMatchCompleteType }>(
     "/internal/tournament/match-complete",
     {
@@ -181,67 +133,32 @@ export default async function internalTournamentRoutes(fastify: FastifyInstance)
       if (request.service !== "pong") {
         return reply
           .code(403)
-          .send({ error: "Forbidden: only pong service allowed" });
+          .send({ error: "Forbidden — only pong-service may call this" });
       }
 
       const {
         tournamentId,
         tournamentMatchId,
         winnerId,
-        leftPlayerId,
-        rightPlayerId,
         leftScore,
         rightScore,
       } = request.body;
 
-      const runTx = fastify.db.transaction(() => {
-        // 1) Load match & basic info
+      const tx = fastify.db.transaction(() => {
+        // Load match
         const match = fastify.db
           .prepare(
-            `SELECT id, tournament_id, round, match_index, status,
-                    left_player_id, right_player_id
+            `SELECT id, round, match_index, left_player_id, right_player_id
              FROM tournament_matches
              WHERE id = ? AND tournament_id = ?`
           )
-          .get(
-            tournamentMatchId,
-            tournamentId
-          ) as
-          | {
-              id: number;
-              tournament_id: number;
-              round: number;
-              match_index: number;
-              status: string;
-              left_player_id: number | null;
-              right_player_id: number | null;
-            }
-          | undefined;
+          .get(tournamentMatchId, tournamentId);
 
         if (!match) {
           throw new Error("Tournament match not found");
         }
 
-        // Optional safety: check winner is one of the players
-        if (
-          winnerId !== match.left_player_id &&
-          winnerId !== match.right_player_id
-        ) {
-          fastify.log.warn(
-            {
-              tournamentId,
-              tournamentMatchId,
-              winnerId,
-              leftPlayerId,
-              rightPlayerId,
-              dbLeft: match.left_player_id,
-              dbRight: match.right_player_id,
-            },
-            "WinnerId is not one of the match's players (continuing anyway)"
-          );
-        }
-
-        // 2) Mark this match as finished
+        // Mark match finished
         fastify.db
           .prepare(
             `UPDATE tournament_matches
@@ -251,7 +168,7 @@ export default async function internalTournamentRoutes(fastify: FastifyInstance)
           )
           .run(winnerId, leftScore, rightScore, tournamentMatchId);
 
-        // 3) Advance winner into the next round
+        // Advance winner into next round
         advanceWinnerToNextMatch(
           tournamentId,
           match.round,
@@ -259,24 +176,24 @@ export default async function internalTournamentRoutes(fastify: FastifyInstance)
           winnerId
         );
 
-        // 4) Auto-advance BYEs (matches with a single player)
+        // Auto-progress BYEs (can cascade)
         autoAdvanceByes(tournamentId);
 
-        // 5) If there are no non-finished matches left → finish tournament
+        // If no remaining matches → tournament is finished
         const remaining = fastify.db
           .prepare(
             `SELECT COUNT(*) AS count
              FROM tournament_matches
-             WHERE tournament_id = ? AND status != 'finished'`
+             WHERE tournament_id = ?
+               AND status != 'finished'`
           )
-          .get(tournamentId) as { count: number };
+          .get(tournamentId).count as number;
 
-        if (remaining.count === 0) {
+        if (remaining === 0) {
           fastify.db
             .prepare(
               `UPDATE tournaments
-               SET status = 'finished',
-                   finished_at = CURRENT_TIMESTAMP
+               SET status = 'finished', finished_at = CURRENT_TIMESTAMP
                WHERE id = ?`
             )
             .run(tournamentId);
@@ -284,11 +201,11 @@ export default async function internalTournamentRoutes(fastify: FastifyInstance)
       });
 
       try {
-        runTx();
+        tx();
       } catch (err: any) {
         fastify.log.error(
-          { err, tournamentId, tournamentMatchId },
-          "Failed to process tournament match-complete"
+          { err: err.message, tournamentId, tournamentMatchId },
+          "Tournament progression failed"
         );
         return reply
           .code(500)
@@ -296,7 +213,7 @@ export default async function internalTournamentRoutes(fastify: FastifyInstance)
       }
 
       return reply.send({
-        message: "Tournament match recorded and bracket updated",
+        message: "Tournament updated — winner advanced",
       });
     }
   );
