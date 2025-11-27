@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Pong Leaderboard</title>
+  <style>
+    body {
+      background: #111;
+      color: white;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      text-align: center;
+    }
+
+    h1 {
+      margin-bottom: 20px;
+    }
+
+    table {
+      width: 80%;
+      margin: 0 auto;
+      border-collapse: collapse;
+      background: #1a1a1a;
+      border: 1px solid #333;
+    }
+
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid #333;
+    }
+
+    th {
+      background: #222;
+    }
+
+    tr:hover {
+      background: #333;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      background: #1e90ff;
+      border: none;
+      color: white;
+      cursor: pointer;
+      border-radius: 6px;
+      margin-top: 20px;
+    }
+
+    .btn:hover {
+      background: #187bcd;
+    }
+  </style>
+
+  <script src="./leaderboard.js" defer></script>
+</head>
+<body>
+
+  <h1>🏆 Pong Leaderboard</h1>
+
+  <table id="leaderboardTable">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Player</th>
+        <th>Elo</th>
+        <th>Wins</th>
+        <th>Losses</th>
+      </tr>
+    </thead>
+    <tbody id="leaderboardBody">
+      <!-- Rows inserted dynamically -->
+    </tbody>
+  </table>
+
+  <button class="btn" id="refreshBtn">Refresh</button>
+
+</body>
+</html>
