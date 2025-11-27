@@ -1,101 +1,127 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Tournament Lobby</title>
+  <meta charset="UTF-8" />
+  <title>🏆 Tournament Lobby</title>
 
-  <style>
-    body {
-      background: #111;
-      color: #eee;
-      font-family: Arial, sans-serif;
-      margin: 20px;
-    }
+  <script src="https://cdn.tailwindcss.com"></script>
 
-    h1, h2, h3 {
-      text-align: center;
-    }
-
-    .card {
-      background: #1b1b1b;
-      padding: 20px;
-      margin: 20px auto;
-      border-radius: 8px;
-      width: 600px;
-      border: 1px solid #333;
-    }
-
-    input, button {
-      padding: 10px;
-      margin: 5px 0;
-      width: 100%;
-      border-radius: 6px;
-      border: none;
-    }
-
-    button {
-      background: #1e90ff;
-      color: white;
-      cursor: pointer;
-    }
-
-    button:hover {
-      background: #187bd1;
-    }
-
-    .player {
-      padding: 5px 0;
-      border-bottom: 1px solid #333;
-    }
-
-    .status {
-      margin-top: 15px;
-      text-align: center;
-      font-size: 18px;
-    }
-  </style>
-
-  <script src="tournament.js" defer></script>
+  <!-- Load tournament.ts through Vite -->
+  <script type="module" src="/src/tournament.ts"></script>
 </head>
-<body>
 
-  <h1>Tournament Lobby</h1>
+<body class="bg-slate-900 text-slate-100 font-mono p-6">
+  <h1 class="text-3xl font-bold text-cyan-400 text-center mb-6">
+    🏆 Tournament Lobby
+  </h1>
 
-  <!-- SELECT / LOAD TOURNAMENT -->
-  <div class="card">
-    <h3>Load Tournament</h3>
-    <input id="tournamentIdInput" type="number" placeholder="Tournament ID" />
-    <button id="btnLoadTournament">Load Tournament</button>
+  <!-- LOGIN WARNING -->
+  <div id="login_warning" class="hidden bg-red-700 p-3 rounded text-center mb-6">
+    ⚠️ You must be logged in to access tournaments.
   </div>
 
-  <!-- TOURNAMENT INFO -->
-  <div id="tournamentInfo" class="card" style="display:none;"></div>
+  <!-- MAIN UI -->
+  <div id="main_ui" class="hidden space-y-6 max-w-xl mx-auto">
 
-  <!-- JOIN WITH ALIAS -->
-  <div id="joinBox" class="card" style="display:none;">
-    <h3>Join Tournament</h3>
-    <input id="aliasInput" placeholder="Enter your alias" />
-    <button id="btnJoin">Join</button>
+    <!-- LOAD TOURNAMENT -->
+    <div class="bg-slate-800 p-4 rounded shadow space-y-2">
+      <h2 class="text-lg text-cyan-300 font-semibold">Load Tournament</h2>
+
+      <input id="tournament_id_input"
+             type="number"
+             placeholder="Tournament ID..."
+             class="w-full p-2 text-black rounded" />
+
+      <button id="btn_load_tournament"
+              class="w-full bg-cyan-500 py-2 rounded hover:bg-cyan-600">
+        Load Tournament
+      </button>
+
+      <pre id="tournament_info"
+           class="bg-slate-700 p-2 rounded h-40 overflow-y-auto text-xs"></pre>
+    </div>
+
+    <!-- JOIN TOURNAMENT -->
+    <div class="bg-slate-800 p-4 rounded shadow space-y-2">
+      <h2 class="text-lg text-green-300 font-semibold">Join Tournament</h2>
+
+      <input id="join_tournament_id"
+             type="number"
+             placeholder="Tournament ID..."
+             class="w-full p-2 text-black rounded" />
+
+      <input id="alias_input"
+             type="text"
+             placeholder="Your Tournament Alias..."
+             class="w-full p-2 text-black rounded" />
+
+      <button id="btn_join_tournament"
+              class="w-full bg-green-500 py-2 rounded hover:bg-green-600">
+        Join
+      </button>
+
+      <pre id="join_result"
+           class="bg-slate-700 p-2 rounded h-32 overflow-y-auto text-xs"></pre>
+    </div>
+
+    <!-- START TOURNAMENT -->
+    <div class="bg-slate-800 p-4 rounded shadow space-y-2">
+      <h2 class="text-lg text-yellow-300 font-semibold">Start Tournament</h2>
+
+      <input id="start_tournament_id"
+             type="number"
+             placeholder="Tournament ID..."
+             class="w-full p-2 text-black rounded" />
+
+      <button id="btn_start_tournament"
+              class="w-full bg-yellow-500 py-2 rounded hover:bg-yellow-600">
+        Start Tournament
+      </button>
+
+      <pre id="start_result"
+           class="bg-slate-700 p-2 rounded h-32 overflow-y-auto text-xs"></pre>
+    </div>
+
+    <!-- BRACKET VIEW -->
+    <div class="bg-slate-800 p-4 rounded shadow space-y-2">
+      <h2 class="text-lg text-purple-300 font-semibold">View Bracket</h2>
+
+      <input id="bracket_tournament_id"
+             type="number"
+             placeholder="Tournament ID..."
+             class="w-full p-2 text-black rounded" />
+
+      <input id="bracket_round"
+             type="number"
+             placeholder="Round #"
+             class="w-full p-2 text-black rounded" />
+
+      <button id="btn_view_bracket"
+              class="w-full bg-purple-500 py-2 rounded hover:bg-purple-600">
+        View Round Matches
+      </button>
+
+      <pre id="bracket_result"
+           class="bg-slate-700 p-2 rounded h-40 overflow-y-auto text-xs"></pre>
+    </div>
+
+    <!-- NEXT MATCH -->
+    <div class="bg-slate-800 p-4 rounded shadow space-y-2">
+      <h2 class="text-lg text-pink-300 font-semibold">Your Next Match</h2>
+
+      <input id="nextmatch_tournament_id"
+             type="number"
+             placeholder="Tournament ID..."
+             class="w-full p-2 text-black rounded" />
+
+      <button id="btn_next_match"
+              class="w-full bg-pink-500 py-2 rounded hover:bg-pink-600">
+        Check Next Match
+      </button>
+
+      <pre id="nextmatch_result"
+           class="bg-slate-700 p-2 rounded h-32 overflow-y-auto text-xs"></pre>
+    </div>
   </div>
-
-  <!-- START BUTTON (only for creator) -->
-  <div id="startBox" class="card" style="display:none;">
-    <h3>Start Tournament</h3>
-    <button id="btnStartTournament">Start</button>
-  </div>
-
-  <!-- PLAYER LIST -->
-  <div id="playersList" class="card" style="display:none;">
-    <h3>Players</h3>
-    <div id="players"></div>
-  </div>
-
-  <!-- NEXT MATCH -->
-  <div id="nextMatchBox" class="card" style="display:none;">
-    <h3>Your Next Match</h3>
-    <div id="nextMatchStatus">Checking…</div>
-    <button id="btnNextMatch" style="display:none;">Join Match</button>
-  </div>
-
 </body>
 </html>
