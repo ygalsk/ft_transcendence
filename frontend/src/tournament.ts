@@ -1,4 +1,4 @@
-// tournament.ts
+// src/tournament.ts
 
 const API = window.location.origin;
 
@@ -16,7 +16,6 @@ function authHeader() {
   return JWT ? { Authorization: `Bearer ${JWT}` } : {};
 }
 
-// ---------------- LOGIN CHECK ----------------
 window.addEventListener("DOMContentLoaded", () => {
   const JWT = localStorage.getItem("jwt");
 
@@ -32,12 +31,40 @@ window.addEventListener("DOMContentLoaded", () => {
   bindTournamentEvents();
 });
 
-// ---------------- EVENT BINDINGS ----------------
 function bindTournamentEvents() {
+  // CREATE TOURNAMENT
+  const createBtn = $("btn_create_tournament");
+  if (createBtn) {
+    createBtn.addEventListener("click", async () => {
+      const name = ( $("create_name") as HTMLInputElement ).value.trim();
+      const max = Number(( $("create_max_players") as HTMLInputElement ).value);
 
-  // Load tournament info
-  $("btn_load_tournament").addEventListener("click", async () => {
-    const id = Number(($("tournament_id_input") as HTMLInputElement).value);
+      if (!name || !max) {
+        return text("create_result", "Enter name and max players");
+      }
+
+      text("create_result", "Creating...");
+
+      const r = await fetch(`${API}/api/user/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader() },
+        body: JSON.stringify({
+          name,
+          max_players: max,
+          is_public: true,
+        }),
+      });
+
+      const json = await r.json();
+      text("create_result", JSON.stringify(json, null, 2));
+    });
+  }
+
+  // LOAD tournament info
+  $("btn_load_tournament")?.addEventListener("click", async () => {
+    const id = Number(
+      ( $("tournament_id_input") as HTMLInputElement ).value
+    );
     if (!id) return text("tournament_info", "Enter tournament ID");
 
     text("tournament_info", "Loading...");
@@ -48,13 +75,16 @@ function bindTournamentEvents() {
     text("tournament_info", JSON.stringify(await r.json(), null, 2));
   });
 
-  // Join tournament with alias
-  $("btn_join_tournament").addEventListener("click", async () => {
-    const id = Number(($("join_tournament_id") as HTMLInputElement).value);
-    const alias = ($("alias_input") as HTMLInputElement).value.trim();
+  // JOIN tournament with alias
+  $("btn_join_tournament")?.addEventListener("click", async () => {
+    const id = Number(
+      ( $("join_tournament_id") as HTMLInputElement ).value
+    );
+    const alias = ( $("alias_input") as HTMLInputElement ).value.trim();
 
-    if (!id || !alias)
+    if (!id || !alias) {
       return text("join_result", "Enter tournament ID + alias");
+    }
 
     text("join_result", "Joining...");
 
@@ -67,9 +97,11 @@ function bindTournamentEvents() {
     text("join_result", JSON.stringify(await r.json(), null, 2));
   });
 
-  // Start tournament
-  $("btn_start_tournament").addEventListener("click", async () => {
-    const id = Number(($("start_tournament_id") as HTMLInputElement).value);
+  // START tournament
+  $("btn_start_tournament")?.addEventListener("click", async () => {
+    const id = Number(
+      ( $("start_tournament_id") as HTMLInputElement ).value
+    );
     if (!id) return text("start_result", "Enter tournament ID");
 
     text("start_result", "Starting...");
@@ -82,29 +114,41 @@ function bindTournamentEvents() {
     text("start_result", JSON.stringify(await r.json(), null, 2));
   });
 
-  // View bracket
-  $("btn_view_bracket").addEventListener("click", async () => {
-    const id = Number(($("bracket_tournament_id") as HTMLInputElement).value);
-    const round = Number(($("bracket_round") as HTMLInputElement).value);
+  // VIEW bracket
+  $("btn_view_bracket")?.addEventListener("click", async () => {
+    const id = Number(
+      ( $("bracket_tournament_id") as HTMLInputElement ).value
+    );
+    const round = Number(
+      ( $("bracket_round") as HTMLInputElement ).value
+    );
 
-    if (!id || !round)
+    if (!id || !round) {
       return text("bracket_result", "Enter tournament ID + round");
+    }
 
     text("bracket_result", "Loading...");
 
-    const r = await fetch(`${API}/api/user/tournaments/${id}/round/${round}`, {
-      headers: authHeader(),
-    });
+    const r = await fetch(
+      `${API}/api/user/tournaments/${id}/round/${round}`,
+      { headers: authHeader() }
+    );
 
     text("bracket_result", JSON.stringify(await r.json(), null, 2));
   });
 
-  // Next Match
-  $("btn_next_match").addEventListener("click", async () => {
-    const id = Number(($("nextmatch_tournament_id") as HTMLInputElement).value);
+  // NEXT MATCH
+  $("btn_next_match")?.addEventListener("click", async () => {
+    const id = Number(
+      ( $("nextmatch_tournament_id") as HTMLInputElement ).value
+    );
     if (!id) return text("nextmatch_result", "Enter tournament ID");
 
     const JWT = localStorage.getItem("jwt");
+    if (!JWT) {
+      return text("nextmatch_result", "Not logged in");
+    }
+
     const decoded = JSON.parse(atob(JWT.split(".")[1]));
     const userId = decoded.userId;
 
@@ -115,6 +159,18 @@ function bindTournamentEvents() {
       { headers: authHeader() }
     );
 
-    text("nextmatch_result", JSON.stringify(await r.json(), null, 2));
+    const data = await r.json();
+    text("nextmatch_result", JSON.stringify(data, null, 2));
+
+    if (data.status === "ready" && data.matchKey) {
+      const params = new URLSearchParams();
+      params.set("match", data.matchKey);
+      params.set("tid", String(data.tournamentId));
+      params.set("tmid", String(data.tournamentMatchId));
+      if (data.yourAlias) params.set("alias", data.yourAlias);
+      if (data.opponentAlias) params.set("opponent", data.opponentAlias);
+
+      window.location.href = `/pong.html?${params.toString()}`;
+    }
   });
 }

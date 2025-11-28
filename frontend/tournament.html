@@ -6,7 +6,7 @@
 
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Load tournament.ts through Vite -->
+  <!-- Vite-compiled script -->
   <script type="module" src="/src/tournament.ts"></script>
 </head>
 
@@ -16,19 +16,51 @@
   </h1>
 
   <!-- LOGIN WARNING -->
-  <div id="login_warning" class="hidden bg-red-700 p-3 rounded text-center mb-6">
+  <div id="login_warning"
+       class="hidden bg-red-700 p-3 rounded text-center mb-6">
     ⚠️ You must be logged in to access tournaments.
   </div>
 
   <!-- MAIN UI -->
   <div id="main_ui" class="hidden space-y-6 max-w-xl mx-auto">
 
+    <!-- CREATE TOURNAMENT -->
+        <!-- CREATE TOURNAMENT -->
+    <div class="bg-slate-800 p-4 rounded shadow space-y-2">
+      <h2 class="text-lg text-emerald-300 font-semibold">Create Tournament</h2>
+
+      <input
+        id="create_name"
+        type="text"
+        placeholder="Tournament name..."
+        class="w-full p-2 text-black rounded"
+      />
+
+      <input
+        id="create_max_players"
+        type="number"
+        placeholder="Max players (2, 4, 8, ...)"
+        class="w-full p-2 text-black rounded"
+      />
+
+      <button
+        id="btn_create_tournament"
+        class="w-full bg-emerald-500 py-2 rounded hover:bg-emerald-600"
+      >
+        Create
+      </button>
+
+      <pre
+        id="create_result"
+        class="bg-slate-700 p-2 rounded h-24 overflow-y-auto text-xs"
+      ></pre>
+    </div>
+
     <!-- LOAD TOURNAMENT -->
     <div class="bg-slate-800 p-4 rounded shadow space-y-2">
       <h2 class="text-lg text-cyan-300 font-semibold">Load Tournament</h2>
 
-      <input id="tournament_id_input"
-             type="number"
+      <input id="tournament_id_input" type="number"
              placeholder="Tournament ID..."
              class="w-full p-2 text-black rounded" />
 
@@ -45,13 +77,11 @@
     <div class="bg-slate-800 p-4 rounded shadow space-y-2">
       <h2 class="text-lg text-green-300 font-semibold">Join Tournament</h2>
 
-      <input id="join_tournament_id"
-             type="number"
+      <input id="join_tournament_id" type="number"
              placeholder="Tournament ID..."
              class="w-full p-2 text-black rounded" />
 
-      <input id="alias_input"
-             type="text"
+      <input id="alias_input" type="text"
              placeholder="Your Tournament Alias..."
              class="w-full p-2 text-black rounded" />
 
@@ -68,37 +98,34 @@
     <div class="bg-slate-800 p-4 rounded shadow space-y-2">
       <h2 class="text-lg text-yellow-300 font-semibold">Start Tournament</h2>
 
-      <input id="start_tournament_id"
-             type="number"
+      <input id="start_tournament_id" type="number"
              placeholder="Tournament ID..."
              class="w-full p-2 text-black rounded" />
 
       <button id="btn_start_tournament"
               class="w-full bg-yellow-500 py-2 rounded hover:bg-yellow-600">
-        Start Tournament
+        Start
       </button>
 
       <pre id="start_result"
            class="bg-slate-700 p-2 rounded h-32 overflow-y-auto text-xs"></pre>
     </div>
 
-    <!-- BRACKET VIEW -->
+    <!-- VIEW BRACKET -->
     <div class="bg-slate-800 p-4 rounded shadow space-y-2">
       <h2 class="text-lg text-purple-300 font-semibold">View Bracket</h2>
 
-      <input id="bracket_tournament_id"
-             type="number"
+      <input id="bracket_tournament_id" type="number"
              placeholder="Tournament ID..."
              class="w-full p-2 text-black rounded" />
 
-      <input id="bracket_round"
-             type="number"
+      <input id="bracket_round" type="number"
              placeholder="Round #"
              class="w-full p-2 text-black rounded" />
 
       <button id="btn_view_bracket"
               class="w-full bg-purple-500 py-2 rounded hover:bg-purple-600">
-        View Round Matches
+        View Matches
       </button>
 
       <pre id="bracket_result"
@@ -109,19 +136,19 @@
     <div class="bg-slate-800 p-4 rounded shadow space-y-2">
       <h2 class="text-lg text-pink-300 font-semibold">Your Next Match</h2>
 
-      <input id="nextmatch_tournament_id"
-             type="number"
+      <input id="nextmatch_tournament_id" type="number"
              placeholder="Tournament ID..."
              class="w-full p-2 text-black rounded" />
 
       <button id="btn_next_match"
               class="w-full bg-pink-500 py-2 rounded hover:bg-pink-600">
-        Check Next Match
+        Check Match
       </button>
 
       <pre id="nextmatch_result"
            class="bg-slate-700 p-2 rounded h-32 overflow-y-auto text-xs"></pre>
     </div>
+
   </div>
 </body>
 </html>

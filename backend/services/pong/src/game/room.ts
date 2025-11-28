@@ -411,7 +411,6 @@ export class Room {
       reason,
   };
     this.onMatchFinished(payload);
-
     this.broadcastState(this.getSerializedState());
   }
 

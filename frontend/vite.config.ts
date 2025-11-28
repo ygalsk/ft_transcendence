@@ -1,20 +1,22 @@
+// vite.config.ts
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { resolve } from 'path'
 
-// Proxy API calls to backend gateway
 export default defineConfig({
-  plugins: [react()],
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:3000'
-    }
+      '/api': 'http://localhost:3000',
+    },
   },
   build: {
     rollupOptions: {
       input: {
-        main: '/index.html',
-      }
-    }
-  }
+        main:       resolve(__dirname, 'index.html'),
+        pong:       resolve(__dirname, 'pong.html'),
+        leaderboard:resolve(__dirname, 'leaderboard.html'),
+        tournament: resolve(__dirname, 'tournament.html'),
+      },
+    },
+  },
 })
