@@ -253,8 +253,9 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
           matchId: string;
           scoreLimit?: number;
           tournamentId?: number;
+          tournamentMatchId?: number;   // 👈 add this
         }) => {
-          const { matchId, scoreLimit, tournamentId } = payload;
+    const { matchId, scoreLimit, tournamentId, tournamentMatchId } = payload;
 
           if (!matchId) {
             socket.emit("error", { message: "matchId is required" });
@@ -278,6 +279,7 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
               allowSpectators: true,
               enableAi: false,
               tournamentId,
+              tournamentMatchId, 
             };
             room = setupRoom(fastify, matchId, config);
           }
