@@ -11,13 +11,10 @@ import {
   RoomPlayer,
   ScoreState,
   SerializedGameState,
-  AiDifficulty,        // ⭐ ADDED
+  AiDifficulty,
 } from "./types";
 import {
-  FIELD_HEIGHT,
-  FIELD_WIDTH,
   MS_PER_TICK,
-  PADDLE_HEIGHT,
   applyPlayerInput,
   createInitialBall,
   createInitialPaddles,
@@ -35,7 +32,7 @@ export type MatchEndReason = "normal" | "disconnect" | "forfeit";
 export interface MatchFinishedPayload {
   matchId: string;
   tournamentId?: number;
-  tournamentMatchId?: number;   // ⭐ REQUIRED
+  tournamentMatchId?: number;
   winnerSide: PlayerSide;
   score: ScoreState;
   leftPlayer: RoomPlayer | null;
@@ -43,12 +40,11 @@ export interface MatchFinishedPayload {
   reason: MatchEndReason;
 }
 
-
 // ---------------------------
 // Room constants
 // ---------------------------
 
-const DISCONNECT_GRACE_MS = 60_000; // 60s grace like chess.com
+const DISCONNECT_GRACE_MS = 60_000; // 60s grace
 const SERVE_DELAY_MS = 1_000;       // 1s pause before each serve
 
 // ---------------------------
@@ -84,7 +80,7 @@ export class Room {
   private finishedAt?: number;
   private currentServeSide: PlayerSide | null = null;
 
-  // Hooks to be plugged in by WS / tournament / app layer
+  // Hooks to be plugged by WS / outer layer
   public broadcastState: (state: SerializedGameState) => void = () => {};
   public onMatchFinished: (payload: MatchFinishedPayload) => void = () => {};
   public log: (level: "info" | "warn" | "error", message: string, meta?: any) => void = () => {};
@@ -116,7 +112,6 @@ export class Room {
       clearTimeout(this.serveTimer);
       this.serveTimer = null;
     }
-    // Clear any disconnect timers
     (["left", "right"] as PlayerSide[]).forEach((side) => {
       const p = this.players[side];
       if (p?.disconnectTimer) {
@@ -149,7 +144,7 @@ export class Room {
         connected: true,
       };
       this.log("info", "Player joined room", { roomId: this.id, side: "left", userId });
-      this.maybeStartServing();
+      this.maybeStartServing();          // 👈 only this
       return "left";
     }
 
@@ -164,7 +159,7 @@ export class Room {
         connected: true,
       };
       this.log("info", "Player joined room", { roomId: this.id, side: "right", userId });
-      this.maybeStartServing();
+      this.maybeStartServing();          // 👈 only this
       return "right";
     }
 
@@ -182,7 +177,7 @@ export class Room {
   }
 
   // ---------------------------
-  //  ⭐ UPDATED: AI supports difficulty
+  // AI
   // ---------------------------
 
   public addAi(
@@ -304,7 +299,12 @@ export class Room {
       return;
     }
 
-    if (this.state === "waiting" || this.state === "starting" || this.state === "paused") {
+    if (this.state === "waiting") {
+      this.broadcastState(this.getSerializedState());
+      return;
+    }
+
+    if (this.state === "starting" || this.state === "paused") {
       this.broadcastState(this.getSerializedState());
       return;
     }
@@ -403,13 +403,13 @@ export class Room {
     const payload: MatchFinishedPayload = {
       matchId: this.id,
       tournamentId: this.config.tournamentId,
-      tournamentMatchId: this.config.tournamentMatchId,  // ⭐ ADD THIS
+      tournamentMatchId: this.config.tournamentMatchId,
       winnerSide,
       score: { ...this.score },
       leftPlayer: this.players.left,
       rightPlayer: this.players.right,
       reason,
-  };
+    };
     this.onMatchFinished(payload);
     this.broadcastState(this.getSerializedState());
   }
@@ -461,7 +461,7 @@ export const rooms = new Map<string, Room>();
 export function createRoom(id: string, config: MatchConfig): Room {
   const room = new Room(id, config);
   rooms.set(id, room);
-  room.start();
+  room.start();              // 👈 IMPORTANT: start loop here
   return room;
 }
 
