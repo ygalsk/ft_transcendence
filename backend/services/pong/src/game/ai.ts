@@ -8,7 +8,7 @@ import {
   SerializedGameState,
   AiDifficulty,
 } from "./types";
-import { FIELD_HEIGHT, FIELD_WIDTH } from "./physics";
+import { FIELD_HEIGHT, FIELD_WIDTH, PADDLE_OFFSET_X } from "./physics";
 
 /**
  * AI Controller with difficulty:
@@ -61,23 +61,23 @@ export class AiController {
   private configureByDifficulty(difficulty: AiDifficulty) {
     switch (difficulty) {
       case "easy":
-        this.predictionError = 45;        // very imprecise
+        this.predictionError = 60;        // very imprecise
         this.tolerance = 18;              // moves less aggressively
-        this.idleCenterTolerance = 45;    // often idles near center
-        this.maxPredictTime = 180;        // doesn't look too far
+        this.idleCenterTolerance = 50;    // often idles near center
+        this.maxPredictTime = 90;        // doesn't look too far
         break;
       case "hard":
-        this.predictionError = 6;         // very precise
+        this.predictionError = 15;         // very precise
         this.tolerance = 6;               // reacts to small offsets
         this.idleCenterTolerance = 15;    // stays well centered
-        this.maxPredictTime = 300;        // looks further ahead
+        this.maxPredictTime = 180;        // looks further ahead
         break;
       case "medium":
       default:
-        this.predictionError = 20;
+        this.predictionError = 30;
         this.tolerance = 10;
-        this.idleCenterTolerance = 25;
-        this.maxPredictTime = 240;
+        this.idleCenterTolerance = 30;
+        this.maxPredictTime = 120;
         break;
     }
   }
@@ -112,7 +112,7 @@ export class AiController {
     }
 
     // Compute X coordinate of AI paddle roughly based on render coordinates
-    const aiX = this.side === "left" ? 20 : FIELD_WIDTH - 20;
+    const aiX = this.side === "left" ? PADDLE_OFFSET_X : FIELD_WIDTH - PADDLE_OFFSET_X;
     const dx = aiX - ballX;
 
     // If for some reason sign doesn't match, just idle

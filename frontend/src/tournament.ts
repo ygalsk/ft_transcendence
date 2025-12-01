@@ -16,6 +16,9 @@ function authHeader() {
   return JWT ? { Authorization: `Bearer ${JWT}` } : {};
 }
 
+// --------------------------------------------------
+// LOGIN CHECK
+// --------------------------------------------------
 window.addEventListener("DOMContentLoaded", () => {
   const JWT = localStorage.getItem("jwt");
 
@@ -31,40 +34,37 @@ window.addEventListener("DOMContentLoaded", () => {
   bindTournamentEvents();
 });
 
+// --------------------------------------------------
+// ALL BUTTON HANDLERS
+// --------------------------------------------------
 function bindTournamentEvents() {
-  // CREATE TOURNAMENT
-  const createBtn = $("btn_create_tournament");
-  if (createBtn) {
-    createBtn.addEventListener("click", async () => {
-      const name = ( $("create_name") as HTMLInputElement ).value.trim();
-      const max = Number(( $("create_max_players") as HTMLInputElement ).value);
 
-      if (!name || !max) {
-        return text("create_result", "Enter name and max players");
-      }
+  // CREATE
+  $("btn_create_tournament")?.addEventListener("click", async () => {
+    const name = ( $("create_name") as HTMLInputElement ).value.trim();
+    const max = Number(( $("create_max_players") as HTMLInputElement ).value);
 
-      text("create_result", "Creating...");
+    if (!name || !max)
+      return text("create_result", "Enter name + max players");
 
-      const r = await fetch(`${API}/api/user/tournaments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeader() },
-        body: JSON.stringify({
-          name,
-          max_players: max,
-          is_public: true,
-        }),
-      });
+    text("create_result", "Creating...");
 
-      const json = await r.json();
-      text("create_result", JSON.stringify(json, null, 2));
+    const r = await fetch(`${API}/api/user/tournaments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeader() },
+      body: JSON.stringify({
+        name,
+        max_players: max,
+        is_public: true,
+      }),
     });
-  }
 
-  // LOAD tournament info
+    text("create_result", JSON.stringify(await r.json(), null, 2));
+  });
+
+  // LOAD
   $("btn_load_tournament")?.addEventListener("click", async () => {
-    const id = Number(
-      ( $("tournament_id_input") as HTMLInputElement ).value
-    );
+    const id = Number(( $("tournament_id_input") as HTMLInputElement ).value);
     if (!id) return text("tournament_info", "Enter tournament ID");
 
     text("tournament_info", "Loading...");
@@ -72,19 +72,17 @@ function bindTournamentEvents() {
     const r = await fetch(`${API}/api/user/tournaments/${id}`, {
       headers: authHeader(),
     });
+
     text("tournament_info", JSON.stringify(await r.json(), null, 2));
   });
 
-  // JOIN tournament with alias
+  // JOIN
   $("btn_join_tournament")?.addEventListener("click", async () => {
-    const id = Number(
-      ( $("join_tournament_id") as HTMLInputElement ).value
-    );
+    const id = Number(( $("join_tournament_id") as HTMLInputElement ).value);
     const alias = ( $("alias_input") as HTMLInputElement ).value.trim();
 
-    if (!id || !alias) {
+    if (!id || !alias)
       return text("join_result", "Enter tournament ID + alias");
-    }
 
     text("join_result", "Joining...");
 
@@ -97,11 +95,9 @@ function bindTournamentEvents() {
     text("join_result", JSON.stringify(await r.json(), null, 2));
   });
 
-  // START tournament
+  // START
   $("btn_start_tournament")?.addEventListener("click", async () => {
-    const id = Number(
-      ( $("start_tournament_id") as HTMLInputElement ).value
-    );
+    const id = Number(( $("start_tournament_id") as HTMLInputElement ).value);
     if (!id) return text("start_result", "Enter tournament ID");
 
     text("start_result", "Starting...");
@@ -114,18 +110,13 @@ function bindTournamentEvents() {
     text("start_result", JSON.stringify(await r.json(), null, 2));
   });
 
-  // VIEW bracket
+  // BRACKET
   $("btn_view_bracket")?.addEventListener("click", async () => {
-    const id = Number(
-      ( $("bracket_tournament_id") as HTMLInputElement ).value
-    );
-    const round = Number(
-      ( $("bracket_round") as HTMLInputElement ).value
-    );
+    const id = Number(( $("bracket_tournament_id") as HTMLInputElement ).value);
+    const round = Number(( $("bracket_round") as HTMLInputElement ).value);
 
-    if (!id || !round) {
+    if (!id || !round)
       return text("bracket_result", "Enter tournament ID + round");
-    }
 
     text("bracket_result", "Loading...");
 
@@ -139,17 +130,11 @@ function bindTournamentEvents() {
 
   // NEXT MATCH
   $("btn_next_match")?.addEventListener("click", async () => {
-    const id = Number(
-      ( $("nextmatch_tournament_id") as HTMLInputElement ).value
-    );
+    const id = Number(( $("nextmatch_tournament_id") as HTMLInputElement ).value);
     if (!id) return text("nextmatch_result", "Enter tournament ID");
 
     const JWT = localStorage.getItem("jwt");
-    if (!JWT) {
-      return text("nextmatch_result", "Not logged in");
-    }
-
-    const decoded = JSON.parse(atob(JWT.split(".")[1]));
+    const decoded = JSON.parse(atob(JWT!.split(".")[1]));
     const userId = decoded.userId;
 
     text("nextmatch_result", "Checking...");
@@ -162,13 +147,13 @@ function bindTournamentEvents() {
     const data = await r.json();
     text("nextmatch_result", JSON.stringify(data, null, 2));
 
-    if (data.status === "ready" && data.matchKey) {
+    if (data.status === "ready") {
       const params = new URLSearchParams();
-      params.set("match", data.matchKey);
-      params.set("tid", String(data.tournamentId));
-      params.set("tmid", String(data.tournamentMatchId));
-      if (data.yourAlias) params.set("alias", data.yourAlias);
-      if (data.opponentAlias) params.set("opponent", data.opponentAlias);
+      params.set("match", data.matchId);             // correct key
+      params.set("tId", String(id));                 // FIXED
+      params.set("mId", String(data.matchId));       // FIXED
+      params.set("alias", data.yourAlias || "");
+      params.set("opponent", data.opponentAlias || "");
 
       window.location.href = `/pong.html?${params.toString()}`;
     }
