@@ -318,6 +318,19 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
             mode: tournamentId ? "tournament" : "casual",
           });
 
+          // ------------------------------------------------------------
+          // ⭐ START MATCH AUTOMATICALLY WHEN BOTH PLAYERS ARE PRESENT
+          // ------------------------------------------------------------
+          if (room.players.left && room.players.right) {
+            room.forceStart();
+
+            fastify.log.info(
+              { roomId: room.id },
+              "Both players joined — starting match"
+            );
+          }
+
+
           fastify.log.info(
             { roomId: room.id, side, as: displayName, tournamentId },
             "Player joined match via join_match"

@@ -148,14 +148,16 @@ function bindTournamentEvents() {
     text("nextmatch_result", JSON.stringify(data, null, 2));
 
     if (data.status === "ready") {
-      const params = new URLSearchParams();
-      params.set("match", data.matchId);             // correct key
-      params.set("tId", String(id));                 // FIXED
-      params.set("mId", String(data.matchId));       // FIXED
-      params.set("alias", data.yourAlias || "");
-      params.set("opponent", data.opponentAlias || "");
+      const url =
+        `/pong.html?` +
+        `matchId=${encodeURIComponent(data.matchKey)}` +
+        `&tId=${encodeURIComponent(data.tournamentId)}` +
+        `&mId=${encodeURIComponent(data.tournamentMatchId)}` +
+        `&alias=${encodeURIComponent(data.yourAlias || "")}` +
+        `&opponent=${encodeURIComponent(data.opponentAlias || "")}`;
 
-      window.location.href = `/pong.html?${params.toString()}`;
+      window.location.href = url;
     }
+
   });
 }
