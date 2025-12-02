@@ -97,6 +97,17 @@ export class Room {
   // Lifecycle
   // ---------------------------
 
+  // ============================================
+//  PUBLIC: Force game loop & serving to begin
+// ============================================
+  public forceStart(): void {
+    // Start the game loop (if not already running)
+    this.start();
+    
+    // If both players are present, the next tick will call maybeStartServing()
+    this.state = "waiting"; 
+  }
+
   public start(): void {
     if (this.tickTimer) return;
     this.state = "waiting";
@@ -144,7 +155,7 @@ export class Room {
         connected: true,
       };
       this.log("info", "Player joined room", { roomId: this.id, side: "left", userId });
-      this.maybeStartServing();          // 👈 only this
+      this.forceStart();         // 👈 only this
       return "left";
     }
 
@@ -159,7 +170,7 @@ export class Room {
         connected: true,
       };
       this.log("info", "Player joined room", { roomId: this.id, side: "right", userId });
-      this.maybeStartServing();          // 👈 only this
+      this.forceStart();          // 👈 only this
       return "right";
     }
 
