@@ -3,6 +3,7 @@
 import fp from "fastify-plugin";
 import { FastifyInstance } from "fastify";
 import { Socket } from "socket.io";
+import type { AuthUser as TokenUser } from "../../shared/plugins/auth";
 
 import { createRoom, getRoom, removeRoom, Room } from "../game/room";
 import {
@@ -20,13 +21,13 @@ const USER_SERVICE_URL =
 // Simple casual matchmaking: only one waiting player for now
 let waitingSocket: Socket | null = null;
 
-interface AuthUser {
+interface SocketUser {
   userId: number | null;
   email: string | null;
   display_name?: string;
 }
 
-function getDisplayName(user: AuthUser): string {
+function getDisplayName(user: SocketUser): string {
   return (
     user.display_name ||
     user.email ||
@@ -38,11 +39,34 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
   fastify.addHook("onReady", async () => {
     const io = fastify.io;
 
+    // AUTH FIX -SOCKET.IO JWT AUTHENTICATION
+    io.use((socket, next) => {
+      const token = socket.handshake.auth?.token;
+
+      if (!token) {
+        return next(); // guest user
+      }
+
+      try {
+        const payload = fastify.jwt.verify<TokenUser>(token); // decode JWT
+
+        socket.data.user = {
+          userId: payload.userId,
+          email: payload.email,
+          display_name: payload.display_name,
+        };
+      } catch (err) {
+        fastify.log.warn("Invalid JWT in websocket handshake");
+      }
+
+      next();
+    });
+
     io.on("connection", async (socket: Socket) => {
       //
       // 1️⃣ Get authenticated user OR create guest identity
       //
-      let user = socket.data.user as AuthUser | null;
+      let user = socket.data.user as SocketUser | null;
 
       if (!user) {
         // Guest user — allowed for casual
@@ -168,7 +192,7 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
             );
           } else if (waitingSocket.id !== socket.id) {
             const p1 = waitingSocket;
-            const p1User = p1.data.user as AuthUser;
+            const p1User = p1.data.user as SocketUser;
             waitingSocket = null;
 
             const matchId = `casual-${p1.id}-${socket.id}-${Date.now()}`;

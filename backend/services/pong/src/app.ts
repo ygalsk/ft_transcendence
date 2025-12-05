@@ -1,6 +1,7 @@
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import fastify from 'fastify';
 import { join } from 'path';
+import fastifyJwt from '@fastify/jwt';
 
 import dbPlugin from '../shared/plugins/db';
 import authPlugin from '../shared/plugins/auth';
@@ -18,6 +19,11 @@ export function buildApp() {
   app.register(dbPlugin, {
     path: process.env.DB_PATH || '/data/pong.sqlite',
     schemaPath: join(__dirname, '../../db/schema.sql')
+  });
+
+  // JWT for WebSocket auth
+  app.register(fastifyJwt, {
+    secret: process.env.JWT_SECRET || 'supersecret'
   });
 
   // Auth plugin (for HTTP routes)

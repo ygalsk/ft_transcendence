@@ -103,9 +103,10 @@ export class Room {
   public forceStart(): void {
     // Start the game loop (if not already running)
     this.start();
-    
-    // If both players are present, the next tick will call maybeStartServing()
-    this.state = "waiting"; 
+
+    // Kick off serving when both players are connected
+    this.state = "waiting";
+    this.maybeStartServing();
   }
 
   public start(): void {
