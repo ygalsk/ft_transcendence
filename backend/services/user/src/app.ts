@@ -8,6 +8,7 @@ import prometheusPlugin from '../shared/plugins/prometheus';
 import swaggerPlugin from '../shared/plugins/swagger'
 import userRoutes from './routes/user.routes';
 import internalRoutes from './routes/internal.routes';
+import friendsRoutes from './routes/friends.routes';
 
 export function buildApp() {
   const app = fastify({ logger: true }).withTypeProvider<TypeBoxTypeProvider>();
@@ -33,6 +34,7 @@ export function buildApp() {
   // Routes
   app.register(userRoutes);
   app.register(internalRoutes, { prefix: '/internal' });
+  app.register(friendsRoutes);
 
   // Health check
   app.get('/health', async () => {
