@@ -1,8 +1,11 @@
 // src/pong.js — updated tournament-aware logic
 
+const jwt = localStorage.getItem("jwt") || localStorage.getItem("token");
+const isAuthed = !!jwt;
 const socket = io("/", {
   path: "/socket.io",
   transports: ["websocket"],
+  auth: jwt ? { token: jwt } : {},
 });
 
 // --- DOM refs ---
@@ -48,6 +51,11 @@ if (isTournament && controls) {
   controls.style.display = "none";
 }
 
+if (isTournament && !isAuthed && statusBox) {
+  statusBox.textContent =
+    "Login required for tournament play. Please log in again to continue.";
+}
+
 // ----------------------------------------------
 // CASUAL MATCH BUTTONS
 // ----------------------------------------------
@@ -69,6 +77,8 @@ if (btnHuman) {
 // AUTO-JOIN TOURNAMENT MATCH
 // ----------------------------------------------
 socket.on("connect", () => {
+  if (isTournament && !isAuthed) return;
+
   if (!isTournament) {
     statusBox.textContent = "Connected. Select a mode.";
     return;
@@ -84,6 +94,16 @@ socket.on("connect", () => {
     tournamentId: Number(tournamentId),
     tournamentMatchId: Number(tournamentMatchId),
   });
+});
+
+socket.on("connect_error", (err) => {
+  if (statusBox) statusBox.textContent = err.message || "Connection error";
+});
+
+socket.on("error", (err) => {
+  if (!statusBox) return;
+  statusBox.textContent =
+    err?.message || JSON.stringify(err) || "Server rejected the request";
 });
 
 // ----------------------------------------------

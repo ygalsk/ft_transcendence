@@ -8,6 +8,7 @@ const SERVICE_JWT_SECRET = process.env.SERVICE_JWT_SECRET || 'default_internal_s
 export interface AuthUser {
   userId: number;
   email: string;
+  display_name?: string;
 }
 
 export interface ServiceAuthPayload {
@@ -17,7 +18,6 @@ export interface ServiceAuthPayload {
 // Extend Fastify types
 declare module 'fastify' {
   interface FastifyRequest {
-    user?: AuthUser;
     service?: string; // Add service property for inter-service authentication
   }
 
