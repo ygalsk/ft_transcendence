@@ -7,6 +7,7 @@ import type {
   SocketUser,
 } from "./types";
 import { setupRoom } from "./room-setup";
+import { emitMatchReady, scheduleStart } from "./notifications";
 import { getDisplayName } from "./user";
 
 export class CasualMatchmaker {
@@ -63,6 +64,8 @@ export class CasualMatchmaker {
         mode: "casual",
       });
 
+      const startAt = emitMatchReady(fastify, room, "casual", { aiDifficulty: difficulty });
+      scheduleStart(room, startAt);
       fastify.log.info(
         { roomId: room.id, playerSide: side, as: displayName, difficulty },
         "Casual vs AI match started"
@@ -140,6 +143,8 @@ export class CasualMatchmaker {
       mode: "casual",
     });
 
+    const startAt = emitMatchReady(fastify, room, "casual");
+    scheduleStart(room, startAt);
     fastify.log.info(
       {
         roomId: room.id,

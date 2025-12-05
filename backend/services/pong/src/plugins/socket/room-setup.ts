@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { Room, createRoom, removeRoom } from "../../game/room";
+import { createRoom, removeRoom, Room } from "../../game/room";
+import type { RoomHooks } from "../../game/room";
 import type { MatchConfig } from "../../game/types";
 import { reportCasualMatch, reportTournamentMatch } from "./reporters";
 
@@ -9,73 +10,67 @@ export function setupRoom(
   config: MatchConfig,
   userServiceUrl: string
 ): Room {
-  const room = createRoom(matchId, config);
+  return createRoom(matchId, config, buildHooks(fastify, matchId, userServiceUrl));
+}
 
-  room.log = (level, message, meta) => {
-    (fastify.log as any)[level](meta || {}, message);
-  };
+function buildHooks(
+  fastify: FastifyInstance,
+  roomId: string,
+  userServiceUrl: string
+): RoomHooks {
+  return {
+    log: (level, message, meta) => (fastify.log as any)[level](meta || {}, message),
+    broadcastState: (state) => fastify.io.to(roomId).emit("state", state),
+    onMatchFinished: async (payload) => {
+      const {
+        matchId,
+        tournamentId,
+        tournamentMatchId,
+        winnerSide,
+        score,
+        leftPlayer,
+        rightPlayer,
+        reason,
+      } = payload;
 
-  room.broadcastState = (state) => {
-    fastify.io.to(room.id).emit("state", state);
-  };
+      const winner = winnerSide === "left" ? leftPlayer : rightPlayer;
+      const loser = winnerSide === "left" ? rightPlayer : leftPlayer;
 
-  room.onMatchFinished = async (payload) => {
-    const {
-      matchId: finishedMatchId,
-      tournamentId,
-      tournamentMatchId,
-      winnerSide,
-      score,
-      leftPlayer,
-      rightPlayer,
-      reason,
-    } = payload;
+      fastify.log.info(
+        {
+          roomId,
+          matchId,
+          winnerSide,
+          score,
+          reason,
+          tournamentId,
+          tournamentMatchId,
+          winnerUserId: winner?.userId,
+          loserUserId: loser?.userId,
+        },
+        "Match finished"
+      );
 
-    const winner = winnerSide === "left" ? leftPlayer : rightPlayer;
-    const loser = winnerSide === "left" ? rightPlayer : leftPlayer;
-
-    fastify.log.info(
-      {
-        roomId: room.id,
-        matchId: finishedMatchId,
+      fastify.io.to(roomId).emit("match_end", {
         winnerSide,
         score,
         reason,
+        players: {
+          left: leftPlayer && { displayName: leftPlayer.displayName, userId: leftPlayer.userId },
+          right: rightPlayer && { displayName: rightPlayer.displayName, userId: rightPlayer.userId },
+        },
         tournamentId,
-        tournamentMatchId,
-        winnerUserId: winner?.userId,
-        loserUserId: loser?.userId,
-      },
-      "Match finished"
-    );
+      });
 
-    fastify.io.to(room.id).emit("match_end", {
-      winnerSide,
-      score,
-      reason,
-      players: {
-        left: leftPlayer && {
-          displayName: leftPlayer.displayName,
-          userId: leftPlayer.userId,
-        },
-        right: rightPlayer && {
-          displayName: rightPlayer.displayName,
-          userId: rightPlayer.userId,
-        },
-      },
-      tournamentId,
-    });
+      fastify.io.socketsLeave(roomId);
+      removeRoom(roomId);
 
-    fastify.io.socketsLeave(room.id);
-    removeRoom(room.id);
+      if (tournamentId && tournamentMatchId) {
+        await reportTournamentMatch(fastify, payload, userServiceUrl);
+        return;
+      }
 
-    if (tournamentId && tournamentMatchId) {
-      await reportTournamentMatch(fastify, payload, userServiceUrl);
-      return;
-    }
-
-    await reportCasualMatch(fastify, payload, userServiceUrl);
+      await reportCasualMatch(fastify, payload, userServiceUrl);
+    },
   };
-
-  return room;
 }

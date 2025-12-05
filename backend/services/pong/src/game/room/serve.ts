@@ -28,12 +28,14 @@ export function maybeStartServing(ctx: ServeContext): void {
 
   if (!leftReady || !rightReady) return;
 
-  if (!ctx.currentServeSide) {
-    ctx.setCurrentServeSide(Math.random() < 0.5 ? "left" : "right");
+  let serveSide = ctx.currentServeSide;
+  if (!serveSide) {
+    serveSide = Math.random() < 0.5 ? "left" : "right";
+    ctx.setCurrentServeSide(serveSide);
   }
 
-  if (ctx.state === "waiting" && ctx.currentServeSide) {
-    scheduleServe(ctx, ctx.currentServeSide);
+  if (ctx.state === "waiting") {
+    scheduleServe(ctx, serveSide);
   }
 }
 
