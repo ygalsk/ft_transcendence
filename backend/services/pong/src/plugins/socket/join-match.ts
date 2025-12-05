@@ -2,6 +2,7 @@ import type { MatchConfig, PlayerSide } from "../../game/types";
 import { getRoom } from "../../game/room";
 import { setupRoom } from "./room-setup";
 import { getDisplayName } from "./user";
+import { emitMatchReady, scheduleStart } from "./notifications";
 import type { JoinMatchPayload, SocketContext } from "./types";
 
 export function handleJoinMatch(
@@ -51,6 +52,14 @@ export function handleJoinMatch(
       matchId: room.id,
       mode: tournamentId ? "tournament" : "casual",
     });
+    if (room.players.left && room.players.right) {
+      const startAt = emitMatchReady(
+        fastify,
+        room,
+        tournamentId ? "tournament" : "casual"
+      );
+      scheduleStart(room, startAt);
+    }
     return;
   }
 
@@ -71,7 +80,12 @@ export function handleJoinMatch(
   });
 
   if (room.players.left && room.players.right) {
-    room.forceStart();
+    const startAt = emitMatchReady(
+      fastify,
+      room,
+      tournamentId ? "tournament" : "casual"
+    );
+    scheduleStart(room, startAt);
     fastify.log.info({ roomId: room.id }, "Both players joined — starting match");
   }
 
