@@ -30,6 +30,7 @@ export interface JoinMatchPayload {
   scoreLimit?: number;
   tournamentId?: number;
   tournamentMatchId?: number;
+  alias?: string;            // tournament alias for this player
 }
 
 export interface InputPayload {

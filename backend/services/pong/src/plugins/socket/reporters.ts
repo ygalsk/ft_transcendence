@@ -19,7 +19,7 @@ export async function reportTournamentMatch(
     const token = generateServiceToken("pong");
 
     const response = await fetch(
-      `${userServiceUrl}/internal/tournament/match-complete`,
+      `${userServiceUrl}/internal/tournaments/match-complete`,
       {
         method: "POST",
         headers: {

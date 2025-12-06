@@ -23,12 +23,16 @@ export class AiController {
 
   private lastDecision: PlayerInput = { up: false, down: false };
   private readyForUpdate = true;
+  private plan:
+    | { targetY: number; tolerance: number }
+    | null = null;
 
   // Tunable parameters (set from difficulty)
   private predictionError = 20;          // ±px error around predicted Y
   private tolerance = 10;               // dead zone around target (no movement)
   private idleCenterTolerance = 25;     // how close to center before idle
   private maxPredictTime = 240;         // maximum "frames" we simulate into the future
+  private nearImpactFrames = 45;        // when impact is close, tighten aim
 
   constructor(side: PlayerSide, difficulty: AiDifficulty = "medium") {
     this.side = side;
@@ -47,10 +51,31 @@ export class AiController {
    * Only recomputes when readyForUpdate === true & game is "playing".
    */
   public getInput(state: SerializedGameState): PlayerInput {
+    // Recompute target once per second
     if (this.readyForUpdate && state.state === "playing") {
       this.readyForUpdate = false;
-      this.lastDecision = this.computeDecision(state);
+      this.plan = this.buildPlan(state);
     }
+
+    // If no plan yet (e.g., pre-play), idle
+    if (!this.plan) {
+      return this.idleMove(
+        state.paddles[this.side].y + state.paddles[this.side].height / 2
+      );
+    }
+
+    const paddle = state.paddles[this.side];
+    const paddleCenter = paddle.y + paddle.height / 2;
+    const { targetY, tolerance } = this.plan;
+
+    if (targetY < paddleCenter - tolerance) {
+      this.lastDecision = { up: true, down: false };
+    } else if (targetY > paddleCenter + tolerance) {
+      this.lastDecision = { up: false, down: true };
+    } else {
+      this.lastDecision = { up: false, down: false };
+    }
+
     return this.lastDecision;
   }
 
@@ -64,20 +89,23 @@ export class AiController {
         this.predictionError = 60;        // very imprecise
         this.tolerance = 18;              // moves less aggressively
         this.idleCenterTolerance = 50;    // often idles near center
-        this.maxPredictTime = 90;        // doesn't look too far
+        this.maxPredictTime = 90;         // doesn't look too far
+        this.nearImpactFrames = 50;
         break;
       case "hard":
         this.predictionError = 15;         // very precise
         this.tolerance = 6;               // reacts to small offsets
         this.idleCenterTolerance = 15;    // stays well centered
-        this.maxPredictTime = 180;        // looks further ahead
+        this.maxPredictTime = 210;        // looks further ahead
+        this.nearImpactFrames = 40;
         break;
       case "medium":
       default:
-        this.predictionError = 30;
-        this.tolerance = 10;
+        this.predictionError = 40;       // less precise
+        this.tolerance = 12;             // wider dead zone
         this.idleCenterTolerance = 30;
-        this.maxPredictTime = 120;
+        this.maxPredictTime = 110;       // shorter lookahead
+        this.nearImpactFrames = 35;      // less time in "locked-in" mode
         break;
     }
   }
@@ -86,7 +114,10 @@ export class AiController {
   // Core AI decision
   // --------------------------
 
-  private computeDecision(state: SerializedGameState): PlayerInput {
+  /**
+   * Computes a targetY and tolerance once per second based on the last seen state.
+   */
+  private buildPlan(state: SerializedGameState): { targetY: number; tolerance: number } {
     const paddle = state.paddles[this.side];
     const ball = state.ball;
 
@@ -96,19 +127,17 @@ export class AiController {
     const vx = ball.velocity.x;
     const vy = ball.velocity.y;
 
-    // If ball is almost not moving horizontally, just idle/center.
-    if (Math.abs(vx) < 0.01) {
-      return this.idleMove(paddleCenter);
-    }
-
     // Determine if ball is coming toward this side
     const movingTowardAI =
       (this.side === "left" && vx < 0) ||
       (this.side === "right" && vx > 0);
 
-    if (!movingTowardAI) {
-      // Ball is going away: drift toward vertical center and chill
-      return this.idleMove(paddleCenter);
+    // If ball is almost not moving or going away: aim center, wide tolerance to reduce jitter.
+    if (Math.abs(vx) < 0.01 || !movingTowardAI) {
+      return {
+        targetY: FIELD_HEIGHT / 2,
+        tolerance: this.idleCenterTolerance,
+      };
     }
 
     // Compute X coordinate of AI paddle roughly based on render coordinates
@@ -117,12 +146,16 @@ export class AiController {
 
     // If for some reason sign doesn't match, just idle
     if ((this.side === "left" && dx > 0) || (this.side === "right" && dx < 0)) {
-      return this.idleMove(paddleCenter);
+      return {
+        targetY: FIELD_HEIGHT / 2,
+        tolerance: this.idleCenterTolerance,
+      };
     }
 
     // Time (in "ticks") until ball reaches AI X, limited to avoid madness
     const timeToImpact = Math.abs(dx / vx);
     const t = Math.min(timeToImpact, this.maxPredictTime);
+    const nearImpact = timeToImpact <= this.nearImpactFrames;
 
     // Predict Y with simple "bouncing" off top/bottom
     let predictedY = ballY + vy * t;
@@ -134,18 +167,15 @@ export class AiController {
     }
 
     // Add difficulty-based noise for imperfect play
-    const noise = (Math.random() - 0.5) * 2 * this.predictionError;
-    predictedY += noise;
+    const localError = nearImpact ? this.predictionError * 0.4 : this.predictionError;
+    const noise = (Math.random() - 0.5) * 2 * localError;
+    predictedY = Math.max(0, Math.min(FIELD_HEIGHT, predictedY + noise));
 
-    // Decide movement based on target vs paddle center
-    if (predictedY < paddleCenter - this.tolerance) {
-      return { up: true, down: false };
-    }
-    if (predictedY > paddleCenter + this.tolerance) {
-      return { up: false, down: true };
-    }
+    const localTolerance = nearImpact
+      ? Math.max(4, Math.floor(this.tolerance * 0.6))
+      : this.tolerance;
 
-    return { up: false, down: false };
+    return { targetY: predictedY, tolerance: localTolerance };
   }
 
   /**

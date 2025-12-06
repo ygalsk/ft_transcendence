@@ -371,6 +371,13 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
           ? (getAlias.get(id, opponentId) as { alias: string } | undefined)
           : undefined;
 
+      // Mark match as running to avoid repeated "ready" after players grab the link
+      fastify.db
+        .prepare(
+          `UPDATE tournament_matches SET status = 'running' WHERE id = ?`
+        )
+        .run(pending.id);
+
       return reply.send({
         status: "ready",
         tournamentId: Number(id),
@@ -387,12 +394,28 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
     // Running match
     const running = matches.find((m) => m.status === "running");
     if (running) {
+      const isLeft = running.left_player_id === numericUserId;
+      const opponentId = isLeft
+        ? running.right_player_id
+        : running.left_player_id;
+      const yourAliasRow = getAlias.get(id, numericUserId) as
+        | { alias: string }
+        | undefined;
+      const opponentAliasRow =
+        opponentId != null
+          ? (getAlias.get(id, opponentId) as { alias: string } | undefined)
+          : undefined;
+
       return reply.send({
         status: "running",
         tournamentId: Number(id),
         tournamentMatchId: running.id,
         matchKey: running.pong_match_id,
         round: running.round,
+        yourUserId: numericUserId,
+        yourAlias: yourAliasRow?.alias ?? null,
+        opponentUserId: opponentId ?? null,
+        opponentAlias: opponentAliasRow?.alias ?? null,
       });
     }
 

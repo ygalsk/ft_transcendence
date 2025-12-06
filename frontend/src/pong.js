@@ -13,6 +13,8 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
 const statusBox = document.getElementById("status");
+let countdownTimer = null;
+let hasStartedOnce = false;
 const controls = document.getElementById("controls");
 const btnAI = document.getElementById("btn_ai");
 const btnHuman = document.getElementById("btn_human");
@@ -61,8 +63,8 @@ if (isTournament && !isAuthed && statusBox) {
 // ----------------------------------------------
 if (btnAI) {
   btnAI.onclick = () => {
-    socket.emit("join_casual", { vsAi: true, difficulty: "medium" });
-    statusBox.textContent = "Joining vs AI...";
+    socket.emit("join_casual", { vsAi: true, difficulty: "easy" });
+    statusBox.textContent = "Joining vs AI (easy)...";
   };
 }
 
@@ -93,6 +95,7 @@ socket.on("connect", () => {
     matchId,
     tournamentId: Number(tournamentId),
     tournamentMatchId: Number(tournamentMatchId),
+    alias: yourAlias,
   });
 });
 
@@ -107,6 +110,34 @@ socket.on("error", (err) => {
 });
 
 // ----------------------------------------------
+// MATCH READY COUNTDOWN
+// ----------------------------------------------
+socket.on("match_ready", (info) => {
+  if (!statusBox) return;
+  const { startAt } = info;
+
+  const updateCountdown = () => {
+    const msLeft = startAt - Date.now();
+    if (msLeft <= 0) {
+      statusBox.textContent = "Starting...";
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+      return;
+    }
+    const sec = Math.max(0, Math.ceil(msLeft / 1000));
+    statusBox.textContent = `Match ready. Starting in ${sec}s...`;
+  };
+
+  if (countdownTimer) {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
+
+  updateCountdown();
+  countdownTimer = setInterval(updateCountdown, 200);
+});
+
+// ----------------------------------------------
 // RENDER LOOP
 // ----------------------------------------------
 function draw(state) {
@@ -115,6 +146,15 @@ function draw(state) {
   // background
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // center net
+  ctx.strokeStyle = "#333";
+  ctx.setLineDash([10, 10]);
+  ctx.beginPath();
+  ctx.moveTo(canvas.width / 2, 0);
+  ctx.lineTo(canvas.width / 2, canvas.height);
+  ctx.stroke();
+  ctx.setLineDash([]);
 
   // ball
   ctx.fillStyle = "white";
@@ -145,12 +185,20 @@ socket.on("state", (state) => {
 
   if (!statusBox) return;
 
+  if (state.state === "playing") {
+    hasStartedOnce = true;
+    if (countdownTimer) {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+  }
+
   switch (state.state) {
     case "waiting":
       statusBox.textContent = "Waiting for both players...";
       break;
     case "starting":
-      statusBox.textContent = "Get ready...";
+      statusBox.textContent = hasStartedOnce ? "Playing!" : "Get ready...";
       break;
     case "playing":
       statusBox.textContent = "Playing!";
@@ -168,6 +216,10 @@ socket.on("state", (state) => {
 // MATCH START / END MESSAGES
 // ----------------------------------------------
 socket.on("match_start", (info) => {
+  if (countdownTimer) {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
   statusBox.innerHTML = `
     <b>Match Started</b><br>
     You are: <b>${info.you}</b><br>
@@ -177,10 +229,23 @@ socket.on("match_start", (info) => {
 });
 
 socket.on("match_end", (end) => {
+  if (countdownTimer) {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
+  const leftName =
+    end.players?.left?.displayName ||
+    (isTournament ? yourAlias : "Left");
+  const rightName =
+    end.players?.right?.displayName ||
+    (isTournament ? opponentAlias : "Right");
+  const winner =
+    end.winnerSide === "left" ? leftName : rightName;
   statusBox.innerHTML = `
     <b>Match Finished</b><br>
-    Winner: ${end.winnerSide.toUpperCase()}<br>
-    Final Score: ${end.score.left} - ${end.score.right}
+    Winner: ${winner}<br>
+    Final Score: ${end.score.left} - ${end.score.right}<br>
+    ${leftName} vs ${rightName}
   `;
 
   if (end.tournamentId) {

@@ -147,7 +147,7 @@ function bindTournamentEvents() {
     const data = await r.json();
     text("nextmatch_result", JSON.stringify(data, null, 2));
 
-    if (data.status === "ready") {
+    if (data.status === "ready" || data.status === "running") {
       const url =
         `/pong.html?` +
         `matchId=${encodeURIComponent(data.matchKey)}` +
