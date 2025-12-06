@@ -80,7 +80,6 @@ export async function ensureSocketUser(
 export function getDisplayName(user: SocketUser): string {
   return (
     user.display_name ||
-    user.email ||
     (user.userId ? `User#${user.userId}` : "Guest")
   );
 }

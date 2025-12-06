@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { Room } from "../../game/room";
 import type { AiDifficulty } from "../../game/types";
 
-const READY_LEAD_MS = 2000; // 2s countdown
+const READY_LEAD_MS = 3000; // 3s countdown for clearer start
 
 export function emitMatchReady(
   fastify: FastifyInstance,

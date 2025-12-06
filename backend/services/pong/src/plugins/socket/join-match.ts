@@ -5,14 +5,54 @@ import { getDisplayName } from "./user";
 import { emitMatchReady, scheduleStart } from "./notifications";
 import type { JoinMatchPayload, SocketContext } from "./types";
 
-export function handleJoinMatch(
+function parseMatchKey(matchId: string): { tournamentId: number; round: number; index: number } | null {
+  // Expected format: t{tid}-r{round}-m{index}
+  const m = matchId.match(/^t(\d+)-r(\d+)-m(\d+)$/);
+  if (!m) return null;
+  return {
+    tournamentId: Number(m[1]),
+    round: Number(m[2]),
+    index: Number(m[3]),
+  };
+}
+
+async function isTournamentMatchFinished(
+  fastify: any,
+  userServiceUrl: string,
+  tournamentId: number,
+  tournamentMatchId: number,
+  matchId: string
+): Promise<boolean> {
+  const parsed = parseMatchKey(matchId);
+  if (!parsed) return false;
+
+  try {
+    const res = await fetch(
+      `${userServiceUrl}/tournaments/${tournamentId}/round/${parsed.round}`
+    );
+    if (!res.ok) return false;
+    const data = (await res.json()) as { matches?: any[] };
+    const match = data.matches?.find(
+      (m) => m.matchId === tournamentMatchId || m.index === parsed.index
+    );
+    return match?.status === "finished";
+  } catch (err) {
+    fastify.log.warn(
+      { err, matchId, tournamentId, tournamentMatchId },
+      "Failed to verify tournament match status"
+    );
+    return false;
+  }
+}
+
+export async function handleJoinMatch(
   ctx: SocketContext,
   payload: JoinMatchPayload,
   userServiceUrl: string,
   defaultScoreLimit: number
-): void {
+): Promise<void> {
   const { fastify, socket, user, session } = ctx;
-  const { matchId, scoreLimit, tournamentId, tournamentMatchId } = payload;
+  const { matchId, scoreLimit, tournamentId, tournamentMatchId, alias } = payload;
 
   if (!matchId) {
     socket.emit("error", { message: "matchId is required" });
@@ -24,8 +64,67 @@ export function handleJoinMatch(
     return;
   }
 
+  // Prevent replaying finished tournament matches by checking bracket status if possible
+  if (tournamentId && tournamentMatchId) {
+    const finished = await isTournamentMatchFinished(
+      fastify,
+      userServiceUrl,
+      tournamentId,
+      tournamentMatchId,
+      matchId
+    );
+    if (finished) {
+      socket.emit("error", { message: "This tournament match is already finished" });
+      return;
+    }
+  }
+
   const displayName = getDisplayName(user);
+  const playerName = tournamentId ? alias || displayName : displayName;
+
   let room = getRoom(matchId);
+
+  // --------------------------------------------
+  // Reconnect path: same authenticated user returns
+  // --------------------------------------------
+  if (room && user.userId !== null) {
+    if (room.state === "finished") {
+      socket.emit("error", { message: "This match has already finished" });
+      return;
+    }
+    const side = room.handleReconnect({
+      socketId: socket.id,
+      userId: user.userId,
+    });
+
+    if (side) {
+      session.roomId = room.id;
+      session.side = side;
+      socket.join(room.id);
+
+      const opponent =
+        side === "left"
+          ? room.players.right?.displayName
+          : room.players.left?.displayName;
+
+      socket.emit("match_start", {
+        matchId: room.id,
+        you: side,
+        opponent: opponent ?? "Waiting...",
+        mode: tournamentId ? "tournament" : "casual",
+        reconnected: true,
+      });
+
+      // Send current state immediately so the client doesn't wait
+      socket.emit("state", room.getSerializedState());
+
+      fastify.log.info(
+        { roomId: room.id, side, as: displayName, tournamentId },
+        "Player reconnected to match via join_match"
+      );
+      return;
+    }
+  }
 
   if (!room) {
     const config: MatchConfig = {
@@ -41,7 +140,7 @@ export function handleJoinMatch(
   const side = room.addHumanPlayer({
     socketId: socket.id,
     userId: user.userId,
-    displayName,
+    displayName: playerName,
     avatarUrl: undefined,
   });
 
@@ -52,14 +151,7 @@ export function handleJoinMatch(
       matchId: room.id,
       mode: tournamentId ? "tournament" : "casual",
     });
-    if (room.players.left && room.players.right) {
-      const startAt = emitMatchReady(
-        fastify,
-        room,
-        tournamentId ? "tournament" : "casual"
-      );
-      scheduleStart(room, startAt);
-    }
+    socket.emit("state", room.getSerializedState());
     return;
   }
 
@@ -78,6 +170,7 @@ export function handleJoinMatch(
     opponent: opponent ?? "Waiting...",
     mode: tournamentId ? "tournament" : "casual",
   });
+  socket.emit("state", room.getSerializedState());
 
   if (room.players.left && room.players.right) {
     const startAt = emitMatchReady(

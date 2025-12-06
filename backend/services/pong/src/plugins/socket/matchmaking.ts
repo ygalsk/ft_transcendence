@@ -21,7 +21,7 @@ export class CasualMatchmaker {
   public handleJoin(ctx: SocketContext, payload?: CasualJoinPayload): void {
     const { fastify, socket, user, session } = ctx;
     const vsAi = payload?.vsAi ?? false;
-    const difficulty = payload?.difficulty ?? "medium";
+    const difficulty = payload?.difficulty ?? "easy";
     const displayName = getDisplayName(user);
 
     if (vsAi) {
