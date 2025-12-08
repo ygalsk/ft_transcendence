@@ -12,13 +12,13 @@ export const FIELD_WIDTH = 800;
 export const FIELD_HEIGHT = 500;
 
 export const PADDLE_WIDTH = 10;
-export const PADDLE_HEIGHT = 70;   // 🔥 reduced from 100 → 70 for better balance
+export const PADDLE_HEIGHT = 70;   // reduced from 100 → 70 for better balance
 
 // How far paddles are from the edge
 export const PADDLE_OFFSET_X = 30;
 
 // Movement & physics
-export const PADDLE_SPEED = 7;     // 🔥 reduced from 8 → 7 (optional, smoother feel)
+export const PADDLE_SPEED = 7;     // reduced from 8 → 7 (optional, smoother feel)
 export const BALL_BASE_SPEED = 6;
 export const BALL_SPEED_INCREMENT = 0.6;
 export const MAX_BOUNCE_ANGLE = Math.PI / 3; // 60 degrees

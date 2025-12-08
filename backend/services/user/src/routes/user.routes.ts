@@ -17,6 +17,22 @@ const MIME_TO_EXT = { 'image/jpeg': 'jpg', 'image/png': 'png'};
 
 export default async function userRoutes(fastify: FastifyInstance) {
 
+  // Compatibility: GET /users/:id (same handler as below)
+  fastify.get('/users/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const user = fastify.db.prepare(`
+      SELECT id, email, display_name, avatar_url, bio, wins, losses
+      FROM users WHERE id = ?
+    `).get(id);
+
+    if (!user) {
+      return reply.code(404).send({ error: 'User not found' });
+    }
+
+    return reply.send(user);
+  });
+
   //ensure upload dir exist
   if (!existsSync(AVATAR_DIR)) {
     mkdirSync(AVATAR_DIR, {recursive: true});

@@ -117,6 +117,13 @@ export async function handleJoinMatch(
 
       // Send current state immediately so the client doesn't wait
       socket.emit("state", room.getSerializedState());
+      if (room.startAt && room.state !== "playing") {
+        socket.emit("match_ready", {
+          matchId: room.id,
+          mode: tournamentId ? "tournament" : "casual",
+          startAt: room.startAt,
+        });
+      }
 
       fastify.log.info(
         { roomId: room.id, side, as: displayName, tournamentId },
@@ -152,6 +159,13 @@ export async function handleJoinMatch(
       mode: tournamentId ? "tournament" : "casual",
     });
     socket.emit("state", room.getSerializedState());
+    if (room.startAt && room.state !== "playing") {
+      socket.emit("match_ready", {
+        matchId: room.id,
+        mode: tournamentId ? "tournament" : "casual",
+        startAt: room.startAt,
+      });
+    }
     return;
   }
 
@@ -171,15 +185,30 @@ export async function handleJoinMatch(
     mode: tournamentId ? "tournament" : "casual",
   });
   socket.emit("state", room.getSerializedState());
+  if (room.startAt && room.state !== "playing") {
+    socket.emit("match_ready", {
+      matchId: room.id,
+      mode: tournamentId ? "tournament" : "casual",
+      startAt: room.startAt,
+    });
+  }
 
   if (room.players.left && room.players.right) {
+    room.clearNoShowForfeit();
     const startAt = emitMatchReady(
       fastify,
       room,
       tournamentId ? "tournament" : "casual"
     );
+    room.startAt = startAt ?? null;
     scheduleStart(room, startAt);
     fastify.log.info({ roomId: room.id }, "Both players joined — starting match");
+  } else {
+    // Only one player present in a tournament: schedule no-show forfeit
+    if (tournamentId) {
+      const presentSide = room.players.left ? "left" : "right";
+      room.scheduleNoShowForfeit(presentSide as PlayerSide);
+    }
   }
 
   fastify.log.info(
