@@ -11,10 +11,12 @@ const socket = io("/", {
 // --- DOM refs ---
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
+const countdownOverlay = document.getElementById("countdownOverlay");
 
 const statusBox = document.getElementById("status");
 let countdownTimer = null;
 let hasStartedOnce = false;
+let countdownSeconds = null;
 const controls = document.getElementById("controls");
 const btnAI = document.getElementById("btn_ai");
 const btnHuman = document.getElementById("btn_human");
@@ -122,9 +124,11 @@ socket.on("match_ready", (info) => {
       statusBox.textContent = "Starting...";
       clearInterval(countdownTimer);
       countdownTimer = null;
+      countdownSeconds = null;
       return;
     }
     const sec = Math.max(0, Math.ceil(msLeft / 1000));
+    countdownSeconds = sec;
     statusBox.textContent = `Match ready. Starting in ${sec}s...`;
   };
 
@@ -134,7 +138,7 @@ socket.on("match_ready", (info) => {
   }
 
   updateCountdown();
-  countdownTimer = setInterval(updateCountdown, 200);
+  countdownTimer = setInterval(updateCountdown, 250);
 });
 
 // ----------------------------------------------
@@ -175,6 +179,7 @@ function draw(state) {
   ctx.font = "24px Arial";
   ctx.fillText(state.score.left, canvas.width / 2 - 50, 40);
   ctx.fillText(state.score.right, canvas.width / 2 + 30, 40);
+
 }
 
 // ----------------------------------------------
@@ -183,10 +188,22 @@ function draw(state) {
 socket.on("state", (state) => {
   draw(state);
 
+  // Update countdown overlay text in HTML to avoid canvas flicker
+  if (countdownOverlay) {
+    if (countdownSeconds !== null && countdownSeconds > 0) {
+      countdownOverlay.textContent = `${countdownSeconds}`;
+      countdownOverlay.style.display = "flex";
+    } else {
+      countdownOverlay.textContent = "";
+      countdownOverlay.style.display = "none";
+    }
+  }
+
   if (!statusBox) return;
 
   if (state.state === "playing") {
     hasStartedOnce = true;
+    countdownSeconds = null;
     if (countdownTimer) {
       clearInterval(countdownTimer);
       countdownTimer = null;
@@ -220,6 +237,7 @@ socket.on("match_start", (info) => {
     clearInterval(countdownTimer);
     countdownTimer = null;
   }
+  countdownSeconds = null;
   statusBox.innerHTML = `
     <b>Match Started</b><br>
     You are: <b>${info.you}</b><br>
@@ -233,6 +251,7 @@ socket.on("match_end", (end) => {
     clearInterval(countdownTimer);
     countdownTimer = null;
   }
+  countdownSeconds = null;
   const leftName =
     end.players?.left?.displayName ||
     (isTournament ? yourAlias : "Left");

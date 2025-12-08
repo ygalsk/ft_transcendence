@@ -33,5 +33,5 @@ export function emitMatchReady(
 export function scheduleStart(room: Room, startAt: number | null): void {
   if (!startAt) return;
   const delay = Math.max(0, startAt - Date.now());
-  setTimeout(() => room.forceStart(), delay);
+  setTimeout(() => room.startFromCountdown(), delay);
 }
