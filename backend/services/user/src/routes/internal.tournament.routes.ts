@@ -125,7 +125,7 @@ export default async function internalTournamentRoutes(
   // POST /internal/tournament/match-complete
   // =============================================
   fastify.post<{ Body: TournamentMatchCompleteType }>(
-    "/internal/tournament/match-complete",
+    "/match-complete",
     {
       schema: { body: TournamentMatchCompleteSchema },
       preHandler: [fastify.authenticateService],

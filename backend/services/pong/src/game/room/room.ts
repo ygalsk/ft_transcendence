@@ -27,6 +27,8 @@ export class Room {
   lastInput: Record<PlayerSide, PlayerInput> = { left: { up: false, down: false }, right: { up: false, down: false } };
   aiControllers: Partial<Record<PlayerSide, AiController>> = {};
   currentServeSide: PlayerSide | null = null;
+  startAt: number | null = null;
+  private noShowTimer: NodeJS.Timeout | null = null;
 
   private hooks: RoomHooks;
   private tickTimer: NodeJS.Timeout | null = null;
@@ -45,12 +47,33 @@ export class Room {
   forceStart(): void {
     this.start();
     this.state = "waiting";
-    this.maybeStartServing();
+    this.startAt = null;
   }
 
   start(): void {
     if (this.tickTimer) return;
     this.tickTimer = setInterval(this.tick, MS_PER_TICK);
+  }
+
+  startFromCountdown(): void {
+    // Ensure tick loop is running
+    this.start();
+    // If already finished, do nothing
+    if (this.state === "finished") return;
+    // If both players connected, schedule first serve after the countdown moment
+    const leftReady = this.players.left?.connected ?? false;
+    const rightReady = this.players.right?.connected ?? false;
+    if (!leftReady || !rightReady) {
+      // Keep waiting; tick loop will broadcast waiting state
+      return;
+    }
+
+    // Pick a serve side if none yet and start the serve sequence
+    if (!this.currentServeSide) {
+      this.currentServeSide = Math.random() < 0.5 ? "left" : "right";
+    }
+    this.startAt = null; // countdown reached
+    this.scheduleServe(this.currentServeSide);
   }
 
   stop(): void {
@@ -69,6 +92,10 @@ export class Room {
         player.disconnectTimer = undefined;
       }
     });
+    if (this.noShowTimer) {
+      clearTimeout(this.noShowTimer);
+      this.noShowTimer = null;
+    }
   }
 
   addHumanPlayer(params: {
@@ -184,6 +211,11 @@ export class Room {
   private finishMatch = (winnerSide: PlayerSide, reason: MatchEndReason): void => {
     if (this.state === "finished") return;
     this.state = "finished";
+    this.startAt = null;
+    if (this.noShowTimer) {
+      clearTimeout(this.noShowTimer);
+      this.noShowTimer = null;
+    }
     this.stop();
 
     const payload: MatchFinishedPayload = {
@@ -213,6 +245,37 @@ export class Room {
   private setServeTimer = (timer: NodeJS.Timeout | null): void => {
     this.serveTimer = timer;
   };
+
+  scheduleNoShowForfeit(waitingSide: PlayerSide): void {
+    if (!this.config.tournamentId) return;
+    if (this.noShowTimer) return;
+    // Only schedule when exactly one player is present
+    const leftPresent = !!this.players.left;
+    const rightPresent = !!this.players.right;
+    if (leftPresent === rightPresent) return;
+
+    const opponent: PlayerSide = waitingSide === "left" ? "right" : "left";
+    const GRACE_MS = 120_000;
+    this.hooks.log("info", "Scheduling no-show forfeit", {
+      roomId: this.id,
+      winnerSide: waitingSide,
+      timeoutMs: GRACE_MS,
+    });
+    this.noShowTimer = setTimeout(() => {
+      this.noShowTimer = null;
+      const oppStillMissing = this.players[opponent] == null;
+      if (oppStillMissing && this.state !== "finished") {
+        this.finishMatch(waitingSide, "disconnect");
+      }
+    }, GRACE_MS);
+  }
+
+  clearNoShowForfeit(): void {
+    if (this.noShowTimer) {
+      clearTimeout(this.noShowTimer);
+      this.noShowTimer = null;
+    }
+  }
 
   private get humanContext() {
     return { roomId: this.id, players: this.players, spectators: this.spectators, log: this.hooks.log, forceStart: () => this.forceStart() };

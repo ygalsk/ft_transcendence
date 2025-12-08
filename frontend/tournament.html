@@ -3,150 +3,96 @@
 <head>
   <meta charset="UTF-8" />
   <title>🏆 Tournament Lobby</title>
-
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Vite-compiled script -->
   <script type="module" src="/src/tournament.ts"></script>
 </head>
-
 <body class="bg-slate-900 text-slate-100 font-mono p-6">
-  <h1 class="text-3xl font-bold text-cyan-400 text-center mb-6">
-    🏆 Tournament Lobby
-  </h1>
+  <h1 class="text-3xl font-bold text-cyan-400 text-center mb-6">🏆 Tournament Lobby</h1>
 
-  <!-- LOGIN WARNING -->
-  <div id="login_warning"
-       class="hidden bg-red-700 p-3 rounded text-center mb-6">
+  <div id="login_warning" class="hidden bg-red-700 p-3 rounded text-center mb-6">
     ⚠️ You must be logged in to access tournaments.
   </div>
 
-  <!-- MAIN UI -->
-  <div id="main_ui" class="hidden space-y-6 max-w-xl mx-auto">
+  <div id="main_ui" class="hidden space-y-6 max-w-5xl mx-auto">
 
-    <!-- CREATE TOURNAMENT -->
-        <!-- CREATE TOURNAMENT -->
-    <div class="bg-slate-800 p-4 rounded shadow space-y-2">
-      <h2 class="text-lg text-emerald-300 font-semibold">Create Tournament</h2>
-
-      <input
-        id="create_name"
-        type="text"
-        placeholder="Tournament name..."
-        class="w-full p-2 text-black rounded"
-      />
-
-      <input
-        id="create_max_players"
-        type="number"
-        placeholder="Max players (2, 4, 8, ...)"
-        class="w-full p-2 text-black rounded"
-      />
-
-      <button
-        id="btn_create_tournament"
-        class="w-full bg-emerald-500 py-2 rounded hover:bg-emerald-600"
-      >
-        Create
-      </button>
-
-      <pre
-        id="create_result"
-        class="bg-slate-700 p-2 rounded h-24 overflow-y-auto text-xs"
-      ></pre>
+    <!-- Search / Refresh -->
+    <div class="bg-slate-800 p-4 rounded shadow flex items-center gap-3 flex-wrap">
+      <label for="search_name" class="text-sm text-slate-300">Search tournaments:</label>
+      <input id="search_name" type="text" placeholder="Name contains..." class="flex-1 p-2 text-black rounded min-w-[200px]" />
+      <button id="btn_refresh_open" class="bg-cyan-500 px-3 py-2 rounded hover:bg-cyan-600">Refresh Open</button>
+      <button id="btn_load_all_open" class="text-sm bg-slate-700 px-3 py-2 rounded hover:bg-slate-600">Show all (incl. finished)</button>
     </div>
 
-    <!-- LOAD TOURNAMENT -->
-    <div class="bg-slate-800 p-4 rounded shadow space-y-2">
-      <h2 class="text-lg text-cyan-300 font-semibold">Load Tournament</h2>
-
-      <input id="tournament_id_input" type="number"
-             placeholder="Tournament ID..."
-             class="w-full p-2 text-black rounded" />
-
-      <button id="btn_load_tournament"
-              class="w-full bg-cyan-500 py-2 rounded hover:bg-cyan-600">
-        Load Tournament
-      </button>
-
-      <pre id="tournament_info"
-           class="bg-slate-700 p-2 rounded h-40 overflow-y-auto text-xs"></pre>
+    <!-- Open tournaments -->
+    <div class="bg-slate-800 p-4 rounded shadow">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg text-emerald-300 font-semibold">Open / Active Tournaments</h2>
+        </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="text-slate-300">
+            <tr>
+              <th class="text-left py-1">Name</th>
+              <th class="text-left py-1">Status</th>
+              <th class="text-left py-1">Players</th>
+              <th class="text-left py-1">Joinable</th>
+              <th class="text-left py-1">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="open_list" class="divide-y divide-slate-700">
+            <!-- rows injected -->
+          </tbody>
+        </table>
+      </div>
+      <div id="open_list_result" class="text-xs text-slate-400 mt-2"></div>
     </div>
 
-    <!-- JOIN TOURNAMENT -->
-    <div class="bg-slate-800 p-4 rounded shadow space-y-2">
-      <h2 class="text-lg text-green-300 font-semibold">Join Tournament</h2>
+    <!-- Selected tournament actions -->
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="bg-slate-800 p-4 rounded shadow space-y-2">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg text-cyan-300 font-semibold">Selected Tournament</h2>
+          <span id="selected_badge" class="text-xs bg-slate-700 px-2 py-1 rounded">None</span>
+        </div>
+        <div id="selected_info" class="text-sm text-slate-200">No tournament selected.</div>
+        <div class="bg-slate-900 border border-slate-700 rounded p-2 text-xs">
+          <div class="font-semibold text-slate-100 mb-1">Your next match</div>
+          <div id="next_match_info" class="text-slate-300">Select a tournament and click "Go to match".</div>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <button id="btn_go_match" class="bg-pink-500 px-3 py-2 rounded hover:bg-pink-600 text-sm">Go to match</button>
+          <button id="btn_view_bracket" class="bg-purple-500 px-3 py-2 rounded hover:bg-purple-600 text-sm">View current round</button>
+          <button id="btn_view_leaderboard" class="bg-amber-500 px-3 py-2 rounded hover:bg-amber-600 text-sm">Leaderboard</button>
+          <button id="btn_start_tournament" class="bg-yellow-500 px-3 py-2 rounded hover:bg-yellow-600 text-sm">Start (creator only)</button>
+        </div>
+        <pre id="selected_result" class="bg-slate-700 p-2 rounded h-20 overflow-y-auto text-xs"></pre>
+      </div>
 
-      <input id="join_tournament_id" type="number"
-             placeholder="Tournament ID..."
-             class="w-full p-2 text-black rounded" />
-
-      <input id="alias_input" type="text"
-             placeholder="Your Tournament Alias..."
-             class="w-full p-2 text-black rounded" />
-
-      <button id="btn_join_tournament"
-              class="w-full bg-green-500 py-2 rounded hover:bg-green-600">
-        Join
-      </button>
-
-      <pre id="join_result"
-           class="bg-slate-700 p-2 rounded h-32 overflow-y-auto text-xs"></pre>
+      <div class="bg-slate-800 p-4 rounded shadow space-y-3">
+        <h2 class="text-lg text-emerald-300 font-semibold">Create Tournament</h2>
+        <input id="create_name" type="text" placeholder="Tournament name..." class="w-full p-2 text-black rounded" />
+        <input id="create_max_players" type="number" placeholder="Max players (2, 4, 8, ...)" class="w-full p-2 text-black rounded" />
+        <button id="btn_create_tournament" class="w-full bg-emerald-500 py-2 rounded hover:bg-emerald-600">Create</button>
+        <pre id="create_result" class="bg-slate-700 p-2 rounded h-20 overflow-y-auto text-xs"></pre>
+      </div>
     </div>
 
-    <!-- START TOURNAMENT -->
-    <div class="bg-slate-800 p-4 rounded shadow space-y-2">
-      <h2 class="text-lg text-yellow-300 font-semibold">Start Tournament</h2>
-
-      <input id="start_tournament_id" type="number"
-             placeholder="Tournament ID..."
-             class="w-full p-2 text-black rounded" />
-
-      <button id="btn_start_tournament"
-              class="w-full bg-yellow-500 py-2 rounded hover:bg-yellow-600">
-        Start
-      </button>
-
-      <pre id="start_result"
-           class="bg-slate-700 p-2 rounded h-32 overflow-y-auto text-xs"></pre>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="bg-slate-800 p-4 rounded shadow">
+        <h3 class="text-sm text-purple-200 mb-2">Bracket (current round)</h3>
+        <div id="bracket_table" class="text-xs text-slate-200 space-y-1 h-48 overflow-y-auto bg-slate-700 p-2 rounded"></div>
+      </div>
+      <div class="bg-slate-800 p-4 rounded shadow">
+        <h3 class="text-sm text-amber-200 mb-2">Leaderboard</h3>
+        <pre id="leaderboard_result" class="bg-slate-700 p-2 rounded h-48 overflow-y-auto text-xs"></pre>
+      </div>
     </div>
 
-    <!-- VIEW BRACKET -->
-    <div class="bg-slate-800 p-4 rounded shadow space-y-2">
-      <h2 class="text-lg text-purple-300 font-semibold">View Bracket</h2>
-
-      <input id="bracket_tournament_id" type="number"
-             placeholder="Tournament ID..."
-             class="w-full p-2 text-black rounded" />
-
-      <input id="bracket_round" type="number"
-             placeholder="Round #"
-             class="w-full p-2 text-black rounded" />
-
-      <button id="btn_view_bracket"
-              class="w-full bg-purple-500 py-2 rounded hover:bg-purple-600">
-        View Matches
-      </button>
-
-      <pre id="bracket_result"
-           class="bg-slate-700 p-2 rounded h-40 overflow-y-auto text-xs"></pre>
-    </div>
-
-    <!-- NEXT MATCH -->
-    <div class="bg-slate-800 p-4 rounded shadow space-y-2">
-      <h2 class="text-lg text-pink-300 font-semibold">Your Next Match</h2>
-
-      <input id="nextmatch_tournament_id" type="number"
-             placeholder="Tournament ID..."
-             class="w-full p-2 text-black rounded" />
-
-      <button id="btn_next_match"
-              class="w-full bg-pink-500 py-2 rounded hover:bg-pink-600">
-        Check Match
-      </button>
-
-      <pre id="nextmatch_result"
-           class="bg-slate-700 p-2 rounded h-32 overflow-y-auto text-xs"></pre>
+    <div class="bg-slate-800 p-4 rounded shadow">
+      <h3 class="text-sm text-green-200 mb-2">Final Results</h3>
+      <div id="final_results" class="text-xs text-slate-200 h-28 overflow-y-auto bg-slate-700 p-2 rounded">
+        Tournament not finished yet.
+      </div>
     </div>
 
   </div>
