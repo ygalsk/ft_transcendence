@@ -19,6 +19,7 @@ function authHeader() {
 let selectedTournament: { id: number; name: string; status: string } | null = null;
 let cachedBracket: any = null;
 let cachedLeaderboard: any = null;
+let nextMatchPoll: number | null = null;
 
 function decodeUserId(): number | null {
   const JWT = localStorage.getItem("jwt");
@@ -49,6 +50,8 @@ window.addEventListener("DOMContentLoaded", () => {
   bindTournamentEvents();
   loadOpenTournaments();
   restoreSelectedTournament();
+  // Auto-refresh open list periodically so others see joins/creates without manual reload
+  setInterval(() => loadOpenTournaments(), 10000);
 });
 
 // --------------------------------------------------
@@ -182,6 +185,12 @@ async function goToMatch() {
       await viewCurrentBracket();
     }
 
+    // If not ready yet, start a short poll instead of redirecting
+    if (data.status === "waiting") {
+      scheduleNextMatchPoll();
+      return;
+    }
+
     if (data.status === "ready" || data.status === "running") {
       const redirect =
         `/pong.html?` +
@@ -300,6 +309,7 @@ function setSelectedTournament(t: { id: number; name: string; status: string }) 
   const table = $("bracket_table");
   if (table) table.textContent = "";
   setFinalResults("Tournament not finished yet.");
+  cancelNextMatchPoll();
 }
 
 async function restoreSelectedTournament() {
@@ -318,6 +328,20 @@ async function restoreSelectedTournament() {
     });
   } catch (_) {
     // ignore
+  }
+}
+
+function scheduleNextMatchPoll() {
+  cancelNextMatchPoll();
+  nextMatchPoll = window.setTimeout(() => {
+    goToMatch();
+  }, 3000);
+}
+
+function cancelNextMatchPoll() {
+  if (nextMatchPoll !== null) {
+    clearTimeout(nextMatchPoll);
+    nextMatchPoll = null;
   }
 }
 

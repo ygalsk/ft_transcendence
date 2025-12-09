@@ -17,6 +17,7 @@ const statusBox = document.getElementById("status");
 let countdownTimer = null;
 let hasStartedOnce = false;
 let countdownSeconds = null;
+let joinRetryTimer = null;
 const controls = document.getElementById("controls");
 const btnAI = document.getElementById("btn_ai");
 const btnHuman = document.getElementById("btn_human");
@@ -93,22 +94,19 @@ socket.on("connect", () => {
     ${yourAlias} vs ${opponentAlias}
   `;
 
-  socket.emit("join_match", {
-    matchId,
-    tournamentId: Number(tournamentId),
-    tournamentMatchId: Number(tournamentMatchId),
-    alias: yourAlias,
-  });
+  emitJoinMatch();
 });
 
 socket.on("connect_error", (err) => {
   if (statusBox) statusBox.textContent = err.message || "Connection error";
+  clearJoinRetry();
 });
 
 socket.on("error", (err) => {
   if (!statusBox) return;
   statusBox.textContent =
     err?.message || JSON.stringify(err) || "Server rejected the request";
+  clearJoinRetry();
 });
 
 // ----------------------------------------------
@@ -116,6 +114,7 @@ socket.on("error", (err) => {
 // ----------------------------------------------
 socket.on("match_ready", (info) => {
   if (!statusBox) return;
+  clearJoinRetry();
   const { startAt } = info;
 
   const updateCountdown = () => {
@@ -212,7 +211,7 @@ socket.on("state", (state) => {
 
   switch (state.state) {
     case "waiting":
-      statusBox.textContent = "Waiting for both players...";
+      statusBox.textContent = "Waiting for opponent to join... keep this page open.";
       break;
     case "starting":
       statusBox.textContent = hasStartedOnce ? "Playing!" : "Get ready...";
@@ -237,6 +236,7 @@ socket.on("match_start", (info) => {
     clearInterval(countdownTimer);
     countdownTimer = null;
   }
+  clearJoinRetry();
   countdownSeconds = null;
   statusBox.innerHTML = `
     <b>Match Started</b><br>
@@ -251,6 +251,7 @@ socket.on("match_end", (end) => {
     clearInterval(countdownTimer);
     countdownTimer = null;
   }
+  clearJoinRetry();
   countdownSeconds = null;
   const leftName =
     end.players?.left?.displayName ||
@@ -285,3 +286,34 @@ document.addEventListener("keyup", (e) => {
   if (e.key === "ArrowUp") socket.emit("input", { up: false });
   if (e.key === "ArrowDown") socket.emit("input", { down: false });
 });
+
+// ----------------------------------------------
+// JOIN MATCH RETRY (for tournament)
+// ----------------------------------------------
+function emitJoinMatch() {
+  if (!isTournament) return;
+  socket.emit("join_match", {
+    matchId,
+    tournamentId: Number(tournamentId),
+    tournamentMatchId: Number(tournamentMatchId),
+    alias: yourAlias,
+  });
+  // If we don't get ready/start within 5s, retry once
+  clearJoinRetry();
+  joinRetryTimer = setTimeout(() => {
+    if (statusBox) statusBox.textContent = "Still joining match... retrying.";
+    socket.emit("join_match", {
+      matchId,
+      tournamentId: Number(tournamentId),
+      tournamentMatchId: Number(tournamentMatchId),
+      alias: yourAlias,
+    });
+  }, 5000);
+}
+
+function clearJoinRetry() {
+  if (joinRetryTimer) {
+    clearTimeout(joinRetryTimer);
+    joinRetryTimer = null;
+  }
+}
