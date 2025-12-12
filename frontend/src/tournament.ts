@@ -21,6 +21,29 @@ let cachedBracket: any = null;
 let cachedLeaderboard: any = null;
 let nextMatchPoll: number | null = null;
 
+// --------------------------------------------------
+// Helpers
+// --------------------------------------------------
+async function fetchWithTimeout(
+  url: string,
+  options: any = {},
+  timeoutMs = 10_000
+) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(id);
+    return res;
+  } catch (err: any) {
+    clearTimeout(id);
+    if (err?.name === "AbortError") {
+      throw new Error("Request timed out. Please retry.");
+    }
+    throw err;
+  }
+}
+
 function decodeUserId(): number | null {
   const JWT = localStorage.getItem("jwt");
   if (!JWT) return null;
@@ -101,7 +124,7 @@ async function loadOpenTournaments(status: "open" | "all" = "open") {
   text("open_list_result", "Loading...");
   try {
     const q = ( $("search_name") as HTMLInputElement )?.value?.trim() || "";
-    const res = await fetch(`${API}/api/user/tournaments?status=${status}&q=${encodeURIComponent(q)}`, {
+    const res = await fetchWithTimeout(`${API}/api/user/tournaments?status=${status}&q=${encodeURIComponent(q)}`, {
       headers: authHeader(),
     });
     const data = await res.json();
@@ -122,7 +145,7 @@ async function createTournament() {
 
   text("create_result", "Creating...");
   try {
-    const r = await fetch(`${API}/api/user/tournaments`, {
+    const r = await fetchWithTimeout(`${API}/api/user/tournaments`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify({
@@ -148,7 +171,7 @@ async function joinTournament(id: number) {
 
   text("open_list_result", `Joining ${id}...`);
   try {
-    const r = await fetch(`${API}/api/user/tournaments/join`, {
+    const r = await fetchWithTimeout(`${API}/api/user/tournaments/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify({ tournamentId: id, alias }),
@@ -173,7 +196,7 @@ async function goToMatch() {
   text("selected_result", "Checking next match...");
   const url = `${API}/api/user/tournaments/${selectedTournament.id}/next-match?userId=${userId}`;
   try {
-    const r = await fetch(url, { headers: authHeader() });
+    const r = await fetchWithTimeout(url, { headers: authHeader() });
     const data = await r.json();
     text("selected_result", JSON.stringify(data, null, 2));
     renderNextMatchInfo(data);
@@ -203,6 +226,7 @@ async function goToMatch() {
     }
   } catch (err: any) {
     text("selected_result", "Error: " + err.message);
+    scheduleNextMatchPoll();
   }
 }
 
@@ -211,7 +235,7 @@ async function viewCurrentBracket() {
   const table = $("bracket_table");
   if (table) table.textContent = "Loading current round...";
   try {
-    const r = await fetch(
+    const r = await fetchWithTimeout(
       `${API}/api/user/tournaments/${selectedTournament.id}/bracket`,
       { headers: authHeader() }
     );
@@ -222,6 +246,8 @@ async function viewCurrentBracket() {
     renderNextMatchFromBracket();
     const finished = bracketFinished(data);
     if (finished) {
+      selectedTournament = { ...selectedTournament, status: "finished" };
+      updateActionButtons();
       await loadFinalResults();
     } else {
       setFinalResults("Tournament not finished yet.");
@@ -235,12 +261,16 @@ async function viewLeaderboard() {
   if (!selectedTournament) return text("leaderboard_result", "Select a tournament first.");
   text("leaderboard_result", "Loading leaderboard...");
   try {
-    const r = await fetch(
+    const r = await fetchWithTimeout(
       `${API}/api/user/tournaments/${selectedTournament.id}/leaderboard`,
       { headers: authHeader() }
     );
     const data = await r.json();
     text("leaderboard_result", JSON.stringify(data, null, 2));
+    // If we already know it's finished, show final results now
+    if (selectedTournament?.status === "finished") {
+      setFinalResults(formatFinalResultsFromLeaderboard(data));
+    }
   } catch (err: any) {
     text("leaderboard_result", "Error: " + err.message);
   }
@@ -248,9 +278,12 @@ async function viewLeaderboard() {
 
 async function startTournament() {
   if (!selectedTournament) return text("selected_result", "Select a tournament first.");
+  if (selectedTournament.status === "finished") {
+    return text("selected_result", "Tournament already finished.");
+  }
   text("selected_result", "Starting...");
   try {
-    const r = await fetch(
+    const r = await fetchWithTimeout(
       `${API}/api/user/tournaments/${selectedTournament.id}/start`,
       { method: "POST", headers: authHeader() }
     );
@@ -310,13 +343,14 @@ function setSelectedTournament(t: { id: number; name: string; status: string }) 
   if (table) table.textContent = "";
   setFinalResults("Tournament not finished yet.");
   cancelNextMatchPoll();
+  updateActionButtons();
 }
 
 async function restoreSelectedTournament() {
   const lastId = localStorage.getItem("lastTournamentId");
   if (!lastId) return;
   try {
-    const r = await fetch(`${API}/api/user/tournaments/${lastId}`, {
+    const r = await fetchWithTimeout(`${API}/api/user/tournaments/${lastId}`, {
       headers: authHeader(),
     });
     if (!r.ok) return;
@@ -326,6 +360,10 @@ async function restoreSelectedTournament() {
       name: data.tournament.name,
       status: data.tournament.status,
     });
+    // Try to fetch bracket/results right away for finished tournaments
+    if (data.tournament.status === "finished") {
+      await viewCurrentBracket();
+    }
   } catch (_) {
     // ignore
   }
@@ -343,6 +381,13 @@ function cancelNextMatchPoll() {
     clearTimeout(nextMatchPoll);
     nextMatchPoll = null;
   }
+}
+
+function updateActionButtons() {
+  const isFinished = selectedTournament?.status === "finished";
+  const disablePlay = !selectedTournament || isFinished;
+  (document.getElementById("btn_go_match") as HTMLButtonElement | null)?.toggleAttribute("disabled", disablePlay);
+  (document.getElementById("btn_start_tournament") as HTMLButtonElement | null)?.toggleAttribute("disabled", disablePlay);
 }
 
 // Display helpers
@@ -457,37 +502,40 @@ async function loadFinalResults() {
     const lastRound = rounds[rounds.length - 1];
     const finalMatch = lastRound?.matches?.find((m: any) => m.status === "finished");
 
-    const podiumLines: string[] = [];
-    if (finalMatch) {
-      const champ =
-        finalMatch.winner_id === finalMatch.left?.userId
-          ? finalMatch.left?.alias
-          : finalMatch.right?.alias;
-      const runner =
-        finalMatch.winner_id === finalMatch.left?.userId
-          ? finalMatch.right?.alias
-          : finalMatch.left?.alias;
-      if (champ) podiumLines.push(`🥇 Winner: ${champ}`);
-      if (runner) podiumLines.push(`🥈 Runner-up: ${runner}`);
-      if (finalMatch.score) {
-        podiumLines.push(
-          `Final score: ${finalMatch.score.left}-${finalMatch.score.right}`
-        );
-      }
-    }
-
-    const lb = data.leaderboard || [];
-    const third = lb[2];
-    if (third?.alias) {
-      podiumLines.push(`🥉 Third: ${third.alias}`);
-    }
-
-    if (!podiumLines.length) {
-      podiumLines.push("Tournament finished. Results unavailable.");
-    }
-
-    setFinalResults(podiumLines.join("\n"));
+    setFinalResults(formatFinalResultsFromBracket(finalMatch, data.leaderboard));
   } catch (err: any) {
     setFinalResults("Failed to load final results: " + err.message);
   }
+}
+
+function formatFinalResultsFromBracket(finalMatch: any, leaderboard: any) {
+  const podiumLines: string[] = [];
+  if (finalMatch) {
+    const champ =
+      finalMatch.winner_id === finalMatch.left?.userId
+        ? finalMatch.left?.alias
+        : finalMatch.right?.alias;
+    const runner =
+      finalMatch.winner_id === finalMatch.left?.userId
+        ? finalMatch.right?.alias
+        : finalMatch.left?.alias;
+    if (champ) podiumLines.push(`🥇 Winner: ${champ}`);
+    if (runner) podiumLines.push(`🥈 Runner-up: ${runner}`);
+    if (finalMatch.score) {
+      podiumLines.push(
+        `Final score: ${finalMatch.score.left}-${finalMatch.score.right}`
+      );
+    }
+  }
+
+  const lb = leaderboard || [];
+  const third = lb[2];
+  if (third?.alias) {
+    podiumLines.push(`🥉 Third: ${third.alias}`);
+  }
+
+  if (!podiumLines.length) {
+    podiumLines.push("Tournament finished. Results unavailable.");
+  }
+  return podiumLines.join("\n");
 }
