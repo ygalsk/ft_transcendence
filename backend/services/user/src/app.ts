@@ -41,6 +41,8 @@ export function buildApp() {
   // Internal user routes
   app.register(internalRoutes, { prefix: '/internal' });
 
+  // NOTE: Previously we set per-request socket timeouts; removed to avoid mid-flight aborts.
+
   // ⭐ NEW: public tournament routes (e.g. /tournaments, /tournaments/:id)
   app.register(tournamentRoutes, { prefix: '/tournaments' });
 

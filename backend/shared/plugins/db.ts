@@ -18,6 +18,10 @@ declare module 'fastify' {
 
 async function dbPlugin(fastify: FastifyInstance, opts: DbPluginOptions) {
   const db = new Database(opts.path);
+  // Reduce "database is locked" stalls but allow a short wait
+  db.pragma('busy_timeout = 8000');
+  db.pragma('journal_mode = WAL');
+  db.pragma('synchronous = NORMAL');
 
   // Initialize schema from string or file
   let schema = opts.schema;

@@ -15,9 +15,9 @@ export async function reportTournamentMatch(
   const winner = winnerSide === "left" ? leftPlayer : rightPlayer;
   const loser = winnerSide === "left" ? rightPlayer : leftPlayer;
 
-  try {
+  // Helper to attempt once (no abort controller to avoid mid-flight cancellation)
+  async function attemptOnce() {
     const token = generateServiceToken("pong");
-
     const response = await fetch(
       `${userServiceUrl}/internal/tournaments/match-complete`,
       {
@@ -37,10 +37,28 @@ export async function reportTournamentMatch(
         }),
       }
     );
+    return response;
+  }
 
-    if (!response.ok) {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  try {
+    // Try up to 3 attempts, small backoff between
+    const attempts = 3;
+    let response: Response | null = null;
+    for (let i = 0; i < attempts; i++) {
+      response = await attemptOnce();
+      if (response.ok) break;
+      fastify.log.warn(
+        { attempt: i + 1, status: response.status, statusText: response.statusText },
+        "Tournament match report failed, retrying"
+      );
+      await sleep(300 * (i + 1));
+    }
+
+    if (!response || !response.ok) {
       fastify.log.error(
-        { status: response.status, statusText: response.statusText },
+        { status: response?.status, statusText: response?.statusText },
         "Failed to report tournament match"
       );
     } else {

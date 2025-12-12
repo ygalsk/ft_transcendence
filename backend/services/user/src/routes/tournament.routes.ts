@@ -153,6 +153,14 @@ function autoAdvanceByesLocal(fastify: any, tournamentId: number, maxRound?: num
   }
 
   // If no pending/running matches remain, mark tournament finished
+  const totalMatches = fastify.db
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM tournament_matches
+       WHERE tournament_id = ?`
+    )
+    .get(tournamentId) as { count: number };
+
   const remaining = fastify.db
     .prepare(
       `SELECT COUNT(*) AS count
@@ -161,7 +169,9 @@ function autoAdvanceByesLocal(fastify: any, tournamentId: number, maxRound?: num
          AND status IN ('pending','running')`
     )
     .get(tournamentId) as { count: number };
-  if (remaining.count === 0) {
+
+  // Only finish if there were matches seeded; avoid auto-finishing empty (not started) tournaments
+  if (totalMatches.count > 0 && remaining.count === 0) {
     fastify.db
       .prepare(
         `UPDATE tournaments
@@ -302,37 +312,60 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
   // ?status=all => all statuses
   // =======================================
   fastify.get("/", async (request, reply) => {
-    const { status, q } = request.query as { status?: string; q?: string };
-    const openOnly = !status || status === "open";
-    const like = q ? `%${q}%` : null;
+    const reqId = (request as any).id || "tournaments-list";
+    try {
+      const { status, q } = request.query as { status?: string; q?: string };
+      const openOnly = !status || status === "open";
+      const like = q ? `%${q}%` : null;
+      fastify.log.info({ reqId, status, q }, "Listing tournaments start");
 
-    const tournaments = fastify.db
-      .prepare(
-        `SELECT t.id, t.name, t.status, t.max_players, t.is_public,
-                t.created_at, t.started_at, t.finished_at,
-                (SELECT COUNT(*) FROM tournament_players tp WHERE tp.tournament_id = t.id) AS player_count
-         FROM tournaments t
-         WHERE ( (? = 1 AND t.status IN ('pending', 'running')) OR (? = 0) )
-           AND ( ? IS NULL OR t.name LIKE ? )
-         ORDER BY t.status ASC, t.created_at DESC
-         LIMIT 50`
-      )
-      .all(openOnly ? 1 : 0, openOnly ? 0 : 1, like, like) as any[];
+      let tournaments: any[] = [];
+      if (openOnly) {
+        tournaments = fastify.db
+          .prepare(
+            `SELECT t.id, t.name, t.status, t.max_players, t.is_public,
+                    t.created_at, t.started_at, t.finished_at,
+                    (SELECT COUNT(*) FROM tournament_players tp WHERE tp.tournament_id = t.id) AS player_count
+             FROM tournaments t
+             WHERE t.status IN ('pending', 'running')
+               AND ( ? IS NULL OR t.name LIKE ? )
+             ORDER BY t.status ASC, t.created_at DESC
+             LIMIT 50`
+          )
+          .all(like, like) as any[];
+      } else {
+        tournaments = fastify.db
+          .prepare(
+            `SELECT t.id, t.name, t.status, t.max_players, t.is_public,
+                    t.created_at, t.started_at, t.finished_at,
+                    (SELECT COUNT(*) FROM tournament_players tp WHERE tp.tournament_id = t.id) AS player_count
+             FROM tournaments t
+             WHERE ( ? IS NULL OR t.name LIKE ? )
+             ORDER BY t.status ASC, t.created_at DESC
+             LIMIT 50`
+          )
+          .all(like, like) as any[];
+      }
 
-    const enriched = tournaments.map((t) => ({
-      id: t.id,
-      name: t.name,
-      status: t.status,
-      max_players: t.max_players,
-      is_public: !!t.is_public,
-      created_at: t.created_at,
-      started_at: t.started_at,
-      finished_at: t.finished_at,
-      player_count: t.player_count,
-      can_join: t.status === "pending" && t.player_count < t.max_players,
-    }));
+      const enriched = tournaments.map((t) => ({
+        id: t.id,
+        name: t.name,
+        status: t.status,
+        max_players: t.max_players,
+        is_public: !!t.is_public,
+        created_at: t.created_at,
+        started_at: t.started_at,
+        finished_at: t.finished_at,
+        player_count: t.player_count,
+        can_join: t.status === "pending" && t.player_count < t.max_players,
+      }));
 
-    return reply.send({ tournaments: enriched });
+      fastify.log.info({ reqId, count: enriched.length }, "Listing tournaments done");
+      return reply.send({ tournaments: enriched });
+    } catch (err: any) {
+      fastify.log.error({ reqId, err: err.message }, "Failed to list tournaments");
+      return reply.code(503).send({ error: "Service unavailable" });
+    }
   });
 
   // =======================================
