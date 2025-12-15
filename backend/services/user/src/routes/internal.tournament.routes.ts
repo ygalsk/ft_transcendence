@@ -12,6 +12,18 @@ export default async function internalTournamentRoutes(
   // Serialize match-complete processing to avoid concurrent transactions
   let matchQueue = Promise.resolve();
 
+  // Calculate the maximum round for a tournament based on joined players.
+  function getTournamentMaxRound(tournamentId: number): number {
+    const countRow = fastify.db
+      .prepare(
+        `SELECT COUNT(*) AS count FROM tournament_players WHERE tournament_id = ?`
+      )
+      .get(tournamentId) as { count: number } | undefined;
+    const playerCount = countRow?.count ?? 0;
+    // Minimum of 2 players; guard with 1 round to avoid runaway advancement.
+    return Math.max(1, Math.ceil(Math.log2(Math.max(2, playerCount))));
+  }
+
   // =============================================
   // Helper: advance a winner to the next match
   // =============================================
@@ -19,9 +31,13 @@ export default async function internalTournamentRoutes(
     tournamentId: number,
     round: number,
     matchIndex: number,
-    winnerId: number
+    winnerId: number,
+    maxRound?: number
   ) {
     const nextRound = round + 1;
+    if (maxRound && nextRound > maxRound) {
+      return;
+    }
     const nextIndex = Math.floor(matchIndex / 2);
     const isLeftWinner = matchIndex % 2 === 0;
 
@@ -79,7 +95,7 @@ export default async function internalTournamentRoutes(
   // =============================================
   // Helper: auto-advance BYE matches
   // =============================================
-  function autoAdvanceByes(tournamentId: number) {
+  function autoAdvanceByes(tournamentId: number, maxRound?: number) {
     const findByes = fastify.db.prepare(
       `SELECT id, round, match_index, left_player_id, right_player_id
        FROM tournament_matches
@@ -136,7 +152,8 @@ export default async function internalTournamentRoutes(
           tournamentId,
           m.round,
           m.match_index,
-          winnerId
+          winnerId,
+          maxRound
         );
         progressed = true;
       }
@@ -154,6 +171,19 @@ export default async function internalTournamentRoutes(
     {
       schema: { body: TournamentMatchCompleteSchema },
       preHandler: [fastify.authenticateService],
+      onRequest: (req, _reply, done) => {
+        fastify.log.info(
+          {
+            url: req.url,
+            headers: {
+              authorization: req.headers.authorization,
+              "content-type": req.headers["content-type"],
+            },
+          },
+          "match-complete onRequest"
+        );
+        done();
+      },
     },
     async (request, reply) => {
       if (request.service !== "pong") {
@@ -163,11 +193,22 @@ export default async function internalTournamentRoutes(
       // Grab the payload up-front so we can respond immediately.
       const payload = { ...request.body };
 
+       // Early log to confirm we entered the handler
+       fastify.log.info(
+         {
+           tournamentId: payload.tournamentId,
+           tournamentMatchId: payload.tournamentMatchId,
+           winnerId: payload.winnerId,
+         },
+         "Tournament match-complete received"
+       );
+
       // Respond right away so pong-service is never blocked by DB locks.
       reply.code(202).send({ accepted: true });
 
       // Process in the background, serialized via matchQueue to avoid DB lock contention.
       matchQueue = matchQueue.then(async () => {
+        const startedAt = Date.now();
         const {
           tournamentId,
           tournamentMatchId,
@@ -182,7 +223,20 @@ export default async function internalTournamentRoutes(
         );
 
         try {
+          // If tournament already finished or not running, skip
+          const tStatus = fastify.db
+            .prepare(`SELECT status FROM tournaments WHERE id = ?`)
+            .get(tournamentId) as { status: string } | undefined;
+          if (!tStatus || tStatus.status === "finished") {
+            fastify.log.warn(
+              { tournamentId, tournamentMatchId },
+              "Skipping match-complete: tournament not active"
+            );
+            return;
+          }
+
           const tx = fastify.db.transaction(() => {
+            const maxRound = getTournamentMaxRound(tournamentId);
             const match = fastify.db
               .prepare(
                 `SELECT id, round, match_index, left_player_id, right_player_id
@@ -200,7 +254,11 @@ export default async function internalTournamentRoutes(
               | undefined;
 
             if (!match) {
-              throw new Error("Match not found");
+              fastify.log.error(
+                { tournamentId, tournamentMatchId },
+                "Match not found for match-complete"
+              );
+              return;
             }
 
             fastify.db
@@ -221,10 +279,24 @@ export default async function internalTournamentRoutes(
               tournamentId,
               match.round,
               match.match_index,
-              winnerId
+              winnerId,
+              maxRound
             );
 
-            autoAdvanceByes(tournamentId);
+            fastify.log.info(
+              {
+                tournamentId,
+                tournamentMatchId,
+                winnerId,
+                leftScore,
+                rightScore,
+                round: match.round,
+                matchIndex: match.match_index,
+              },
+              "Match marked finished"
+            );
+
+            autoAdvanceByes(tournamentId, maxRound);
 
             const remaining = fastify.db
               .prepare(
@@ -247,8 +319,31 @@ export default async function internalTournamentRoutes(
           });
 
           tx();
+          const remainingAfter = fastify.db
+            .prepare(
+              `SELECT COUNT(*) AS count
+               FROM tournament_matches
+               WHERE tournament_id = ?
+                 AND status != 'finished'`
+            )
+            .get(tournamentId) as { count: number };
+
+          const openCount = fastify.db
+            .prepare(
+              `SELECT COUNT(*) AS count
+               FROM tournaments
+               WHERE status IN ('pending','running')`
+            )
+            .get() as { count: number };
+
           fastify.log.info(
-            { tournamentId, tournamentMatchId },
+            {
+              tournamentId,
+              tournamentMatchId,
+              remainingAfter,
+              openCountAfter: openCount.count,
+              durationMs: Date.now() - startedAt,
+            },
             "Tournament match processed asynchronously"
           );
         } catch (err: any) {
@@ -265,6 +360,14 @@ export default async function internalTournamentRoutes(
             );
           }
         }
+      }).finally(() => {
+        fastify.log.info(
+          {
+            tournamentId: payload.tournamentId,
+            tournamentMatchId: payload.tournamentMatchId,
+          },
+          "Tournament match queue item finished"
+        );
       }).catch((err) => {
         fastify.log.error(
           { err: err?.message },

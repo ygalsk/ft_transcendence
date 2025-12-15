@@ -19,25 +19,18 @@
     <div class="bg-slate-800 p-4 rounded shadow flex items-center gap-3 flex-wrap">
       <label for="search_name" class="text-sm text-slate-300">Search tournaments:</label>
       <input id="search_name" type="text" placeholder="Name contains..." class="flex-1 p-2 text-black rounded min-w-[200px]" />
-      <button id="btn_refresh_open" class="bg-cyan-500 px-3 py-2 rounded hover:bg-cyan-600">Refresh Open</button>
-      <button id="btn_load_all_open" class="text-sm bg-slate-700 px-3 py-2 rounded hover:bg-slate-600">Show all (incl. finished)</button>
+      <button id="btn_refresh_open" class="bg-cyan-500 px-3 py-2 rounded hover:bg-cyan-600">Open</button>
+      <button id="btn_load_finished" class="text-sm bg-slate-700 px-3 py-2 rounded hover:bg-slate-600">Finished</button>
     </div>
 
     <!-- Open tournaments -->
     <div class="bg-slate-800 p-4 rounded shadow">
         <div class="flex items-center justify-between mb-3">
-          <h2 class="text-lg text-emerald-300 font-semibold">Open / Active Tournaments</h2>
+          <h2 id="open_list_heading" class="text-lg text-emerald-300 font-semibold">Open / Active Tournaments</h2>
         </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
-          <thead class="text-slate-300">
-            <tr>
-              <th class="text-left py-1">Name</th>
-              <th class="text-left py-1">Status</th>
-              <th class="text-left py-1">Players</th>
-              <th class="text-left py-1">Joinable</th>
-              <th class="text-left py-1">Actions</th>
-            </tr>
+          <thead id="open_list_head" class="text-slate-300">
           </thead>
           <tbody id="open_list" class="divide-y divide-slate-700">
             <!-- rows injected -->

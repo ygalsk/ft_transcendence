@@ -186,6 +186,7 @@ function autoAdvanceByesLocal(fastify: any, tournamentId: number, maxRound?: num
 function resolveStalledMatches(
   fastify: any,
   tournamentId: number,
+  maxRound: number,
   timeoutMs = 120_000
 ) {
   const stalled = fastify.db
@@ -250,7 +251,8 @@ function resolveStalledMatches(
       tournamentId,
       m.round,
       m.match_index,
-      winnerId
+      winnerId,
+      maxRound
     );
   }
 
@@ -309,18 +311,19 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
   // =======================================
   // GET /tournaments — list tournaments
   // ?status=open (default) => pending + running
+  // ?status=finished => recently finished (ordered by finished_at DESC)
   // ?status=all => all statuses
   // =======================================
   fastify.get("/", async (request, reply) => {
     const reqId = (request as any).id || "tournaments-list";
     try {
       const { status, q } = request.query as { status?: string; q?: string };
-      const openOnly = !status || status === "open";
+      const filter = status || "open";
       const like = q ? `%${q}%` : null;
-      fastify.log.info({ reqId, status, q }, "Listing tournaments start");
+      fastify.log.info({ reqId, status: filter, q }, "Listing tournaments start");
 
       let tournaments: any[] = [];
-      if (openOnly) {
+      if (filter === "open") {
         tournaments = fastify.db
           .prepare(
             `SELECT t.id, t.name, t.status, t.max_players, t.is_public,
@@ -331,6 +334,19 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
                AND ( ? IS NULL OR t.name LIKE ? )
              ORDER BY t.status ASC, t.created_at DESC
              LIMIT 50`
+          )
+          .all(like, like) as any[];
+      } else if (filter === "finished") {
+        tournaments = fastify.db
+          .prepare(
+            `SELECT t.id, t.name, t.status, t.max_players, t.is_public,
+                    t.created_at, t.started_at, t.finished_at,
+                    (SELECT COUNT(*) FROM tournament_players tp WHERE tp.tournament_id = t.id) AS player_count
+             FROM tournaments t
+             WHERE t.status = 'finished'
+               AND ( ? IS NULL OR t.name LIKE ? )
+             ORDER BY t.finished_at DESC, t.created_at DESC
+             LIMIT 30`
           )
           .all(like, like) as any[];
       } else {
@@ -347,7 +363,7 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
           .all(like, like) as any[];
       }
 
-      const enriched = tournaments.map((t) => ({
+      const enriched: any[] = tournaments.map((t) => ({
         id: t.id,
         name: t.name,
         status: t.status,
@@ -360,7 +376,64 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
         can_join: t.status === "pending" && t.player_count < t.max_players,
       }));
 
-      fastify.log.info({ reqId, count: enriched.length }, "Listing tournaments done");
+      if (filter === "finished" || filter === "all") {
+        // Enrich finished tournaments with podium aliases
+        const getFinalMatch = fastify.db.prepare(
+          `SELECT winner_id, left_player_id, right_player_id
+           FROM tournament_matches
+           WHERE tournament_id = ?
+           ORDER BY round DESC, match_index ASC
+           LIMIT 1`
+        );
+        const getAlias = fastify.db.prepare(
+          `SELECT alias FROM tournament_players WHERE tournament_id = ? AND user_id = ?`
+        );
+        const getTop3 = fastify.db.prepare(
+          `SELECT tp.user_id, tp.alias, tp.seed,
+                  SUM(CASE WHEN tm.winner_id = tp.user_id THEN 1 ELSE 0 END) AS wins,
+                  SUM(CASE WHEN tm.status = 'finished' AND tm.winner_id IS NOT NULL AND tm.winner_id != tp.user_id THEN 1 ELSE 0 END) AS losses
+           FROM tournament_players tp
+           LEFT JOIN tournament_matches tm
+             ON tm.tournament_id = tp.tournament_id
+            AND tm.status = 'finished'
+            AND (tm.left_player_id = tp.user_id OR tm.right_player_id = tp.user_id)
+           WHERE tp.tournament_id = ?
+           GROUP BY tp.user_id, tp.alias, tp.seed
+           ORDER BY wins DESC, losses ASC, tp.seed ASC
+           LIMIT 3`
+        );
+
+        enriched.forEach((t) => {
+          if (t.status !== "finished") return;
+          const finalMatch = getFinalMatch.get(t.id) as
+            | { winner_id: number | null; left_player_id: number | null; right_player_id: number | null }
+            | undefined;
+
+          let winnerAlias: string | null = null;
+          let runnerAlias: string | null = null;
+          if (finalMatch?.winner_id) {
+            winnerAlias = (getAlias.get(t.id, finalMatch.winner_id) as any)?.alias ?? null;
+            const runnerId =
+              finalMatch.winner_id === finalMatch.left_player_id
+                ? finalMatch.right_player_id
+                : finalMatch.left_player_id;
+            if (runnerId) {
+              runnerAlias = (getAlias.get(t.id, runnerId) as any)?.alias ?? null;
+            }
+          }
+
+          const lb = getTop3.all(t.id) as { alias: string }[];
+          const thirdAlias = lb[2]?.alias ?? null;
+
+          t.podium = {
+            winner: winnerAlias,
+            runner_up: runnerAlias,
+            third: thirdAlias,
+          };
+        });
+      }
+
+      fastify.log.info({ reqId, count: enriched.length, filter }, "Listing tournaments done");
       return reply.send({ tournaments: enriched });
     } catch (err: any) {
       fastify.log.error({ reqId, err: err.message }, "Failed to list tournaments");
@@ -815,6 +888,11 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ error: "Tournament not found" });
     }
 
+    // If tournament has not started yet, just report waiting; avoid side effects before seeding
+    if (tournament.status === "pending") {
+      return reply.send({ status: "waiting" });
+    }
+
     // Auto-advance any BYEs before deciding the next match
     const playerCountRow = fastify.db
       .prepare(
@@ -823,7 +901,7 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
       .get(tIdNum) as { count: number };
     const maxRound = Math.max(1, Math.ceil(Math.log2(Math.max(2, playerCountRow.count))));
     // Resolve stalled matches (both assigned, but idle > timeout), then byes
-    resolveStalledMatches(fastify, tIdNum);
+    resolveStalledMatches(fastify, tIdNum, maxRound);
     autoAdvanceByesLocal(fastify, tIdNum, maxRound);
 
     const getMatchesForPlayer = () =>

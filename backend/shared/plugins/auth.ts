@@ -34,17 +34,20 @@ async function authPlugin(fastify: FastifyInstance) {
       const authHeader = request.headers.authorization;
 
       if (!authHeader) {
+        fastify.log.warn({ url: request.url }, 'User auth missing authorization header');
         return reply.code(401).send({ error: 'Missing authorization header' });
       }
 
       const token = authHeader.replace('Bearer ', '');
 
       if (!token) {
+        fastify.log.warn({ url: request.url }, 'User auth missing token');
         return reply.code(401).send({ error: 'Missing token' });
       }
 
       const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
       request.user = decoded;
+      fastify.log.debug({ url: request.url, userId: decoded.userId }, 'User authenticated');
 
     } catch (error) {
       fastify.log.error({ error }, 'User authentication failed');
@@ -58,12 +61,20 @@ async function authPlugin(fastify: FastifyInstance) {
       const authHeader = request.headers.authorization;
 
       if (!authHeader || !authHeader.startsWith('Service ')) {
+        fastify.log.warn(
+          { url: request.url, authHeader },
+          'Service auth missing or invalid header'
+        );
         return reply.code(401).send({ error: 'Missing or invalid Service authorization header' });
       }
 
       const token = authHeader.replace('Service ', '');
       const decoded = verifyServiceToken(token); // Use the new verifyServiceToken function
       request.service = decoded.service;
+      fastify.log.debug(
+        { url: request.url, service: decoded.service },
+        'Service authenticated'
+      );
 
     } catch (error: any) {
       fastify.log.error({ error }, 'Service authentication failed');

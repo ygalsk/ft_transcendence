@@ -20,6 +20,7 @@ let selectedTournament: { id: number; name: string; status: string } | null = nu
 let cachedBracket: any = null;
 let cachedLeaderboard: any = null;
 let nextMatchPoll: number | null = null;
+let currentListFilter: "open" | "finished" = "open";
 
 // --------------------------------------------------
 // Helpers
@@ -71,10 +72,14 @@ window.addEventListener("DOMContentLoaded", () => {
   $("main_ui").classList.remove("hidden");
 
   bindTournamentEvents();
-  loadOpenTournaments();
+  loadTournaments();
   restoreSelectedTournament();
   // Auto-refresh open list periodically so others see joins/creates without manual reload
-  setInterval(() => loadOpenTournaments(), 10000);
+  setInterval(() => {
+    if (currentListFilter === "open") {
+      loadTournaments();
+    }
+  }, 10000);
 });
 
 // --------------------------------------------------
@@ -85,12 +90,12 @@ function bindTournamentEvents() {
   $("btn_create_tournament")?.addEventListener("click", createTournament);
 
   // Refresh open
-  $("btn_refresh_open")?.addEventListener("click", () => loadOpenTournaments());
-  $("btn_load_all_open")?.addEventListener("click", () => loadOpenTournaments("all"));
+  $("btn_refresh_open")?.addEventListener("click", () => loadTournaments("open"));
+  $("btn_load_finished")?.addEventListener("click", () => loadTournaments("finished"));
 
   // Search
   $("search_name")?.addEventListener("input", () => {
-    loadOpenTournaments();
+    loadTournaments();
   });
 
   // Delegated actions for open tournaments
@@ -107,6 +112,9 @@ function bindTournamentEvents() {
       joinTournament(id);
     } else if (target.dataset.action === "select") {
       setSelectedTournament({ id, name, status });
+    } else if (target.dataset.action === "leaderboard") {
+      setSelectedTournament({ id, name, status });
+      viewLeaderboard();
     }
   });
 
@@ -120,16 +128,21 @@ function bindTournamentEvents() {
 // --------------------------------------------------
 // API calls
 // --------------------------------------------------
-async function loadOpenTournaments(status: "open" | "all" = "open") {
+async function loadTournaments(filter: "open" | "finished" = currentListFilter) {
+  currentListFilter = filter;
+  updateListHeading();
   text("open_list_result", "Loading...");
   try {
     const q = ( $("search_name") as HTMLInputElement )?.value?.trim() || "";
-    const res = await fetchWithTimeout(`${API}/api/user/tournaments?status=${status}&q=${encodeURIComponent(q)}`, {
+    const res = await fetchWithTimeout(`${API}/api/user/tournaments?status=${filter}&q=${encodeURIComponent(q)}`, {
       headers: authHeader(),
     });
     const data = await res.json();
-    renderOpenTournaments(data.tournaments || []);
-    text("open_list_result", `${(data.tournaments || []).length} shown`);
+    renderTournaments(data.tournaments || [], filter);
+    text(
+      "open_list_result",
+      `${(data.tournaments || []).length} ${filter === "finished" ? "finished" : "open"} shown`
+    );
   } catch (err: any) {
     text("open_list_result", "Failed to load tournaments: " + err.message);
   }
@@ -159,7 +172,7 @@ async function createTournament() {
       "create_result",
       `${r.ok ? "✅" : "❌"} ${JSON.stringify(data, null, 2)}`
     );
-    loadOpenTournaments();
+    loadTournaments("open");
   } catch (err: any) {
     text("create_result", "Error: " + err.message);
   }
@@ -178,7 +191,7 @@ async function joinTournament(id: number) {
     });
     const data = await r.json();
     text("open_list_result", JSON.stringify(data, null, 2));
-    loadOpenTournaments();
+    loadTournaments("open");
   } catch (err: any) {
     text("open_list_result", "Error: " + err.message);
   }
@@ -269,7 +282,7 @@ async function viewLeaderboard() {
     text("leaderboard_result", JSON.stringify(data, null, 2));
     // If we already know it's finished, show final results now
     if (selectedTournament?.status === "finished") {
-      setFinalResults(formatFinalResultsFromLeaderboard(data));
+      setFinalResults(formatFinalResultsFromLeaderboard(data.leaderboard));
     }
   } catch (err: any) {
     text("leaderboard_result", "Error: " + err.message);
@@ -289,7 +302,7 @@ async function startTournament() {
     );
     const data = await r.json();
     text("selected_result", JSON.stringify(data, null, 2));
-    loadOpenTournaments();
+    loadTournaments("open");
   } catch (err: any) {
     text("selected_result", "Error: " + err.message);
   }
@@ -298,12 +311,46 @@ async function startTournament() {
 // --------------------------------------------------
 // Render helpers
 // --------------------------------------------------
-function renderOpenTournaments(items: any[]) {
+function updateListHeading() {
+  const heading = $("open_list_heading");
+  if (heading) {
+    heading.textContent =
+      currentListFilter === "finished"
+        ? "Finished Tournaments"
+        : "Open / Active Tournaments";
+  }
+}
+
+function renderTournaments(items: any[], filter: "open" | "finished") {
   const tbody = $("open_list");
-  if (!tbody) return;
+  const thead = $("open_list_head");
+  if (!tbody || !thead) return;
+
+  if (filter === "finished") {
+    thead.innerHTML = `
+      <tr>
+        <th class="text-left py-1">Name</th>
+        <th class="text-left py-1">Finished</th>
+        <th class="text-left py-1">Winners</th>
+        <th class="text-left py-1">Actions</th>
+      </tr>
+    `;
+  } else {
+    thead.innerHTML = `
+      <tr>
+        <th class="text-left py-1">Name</th>
+        <th class="text-left py-1">Status</th>
+        <th class="text-left py-1">Players</th>
+        <th class="text-left py-1">Joinable</th>
+        <th class="text-left py-1">Actions</th>
+      </tr>
+    `;
+  }
+
   tbody.innerHTML = "";
   if (!items.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="py-2 text-slate-400">No open tournaments</td></tr>`;
+    const colSpan = filter === "finished" ? 4 : 5;
+    tbody.innerHTML = `<tr><td colspan="${colSpan}" class="py-2 text-slate-400">No tournaments</td></tr>`;
     return;
   }
 
@@ -312,16 +359,39 @@ function renderOpenTournaments(items: any[]) {
     tr.dataset.id = String(t.id);
     tr.dataset.name = t.name;
     tr.dataset.status = t.status;
-    tr.innerHTML = `
-      <td class="py-1">${t.name}</td>
-      <td class="py-1">${t.status}</td>
-      <td class="py-1">${t.player_count}/${t.max_players}</td>
-      <td class="py-1">${t.can_join ? "Yes" : "No"}</td>
-      <td class="py-1 space-x-2">
-        <button data-action="select" class="bg-slate-700 px-2 py-1 rounded text-xs hover:bg-slate-600">Select</button>
-        <button data-action="join" class="bg-emerald-600 px-2 py-1 rounded text-xs hover:bg-emerald-500" ${t.can_join ? "" : "disabled"}>Join</button>
-      </td>
-    `;
+
+    if (filter === "finished") {
+      const podium = t.podium || {};
+      const podiumLine = [
+        podium.winner ? `🥇 ${podium.winner}` : null,
+        podium.runner_up ? `🥈 ${podium.runner_up}` : null,
+        podium.third ? `🥉 ${podium.third}` : null,
+      ]
+        .filter(Boolean)
+        .join(" • ");
+
+      tr.innerHTML = `
+        <td class="py-1">${t.name}</td>
+        <td class="py-1">${t.finished_at ? new Date(t.finished_at).toLocaleString() : "-"}</td>
+        <td class="py-1">${podiumLine || "No results yet"}</td>
+        <td class="py-1 space-x-2">
+          <button data-action="select" class="bg-slate-700 px-2 py-1 rounded text-xs hover:bg-slate-600">Select</button>
+          <button data-action="leaderboard" class="bg-amber-600 px-2 py-1 rounded text-xs hover:bg-amber-500">Leaderboard</button>
+        </td>
+      `;
+    } else {
+      tr.innerHTML = `
+        <td class="py-1">${t.name}</td>
+        <td class="py-1">${t.status}</td>
+        <td class="py-1">${t.player_count}/${t.max_players}</td>
+        <td class="py-1">${t.can_join ? "Yes" : "No"}</td>
+        <td class="py-1 space-x-2">
+          <button data-action="select" class="bg-slate-700 px-2 py-1 rounded text-xs hover:bg-slate-600">Select</button>
+          <button data-action="join" class="bg-emerald-600 px-2 py-1 rounded text-xs hover:bg-emerald-500" ${t.can_join ? "" : "disabled"}>Join</button>
+        </td>
+      `;
+    }
+
     tbody.appendChild(tr);
   }
 }
@@ -344,6 +414,9 @@ function setSelectedTournament(t: { id: number; name: string; status: string }) 
   setFinalResults("Tournament not finished yet.");
   cancelNextMatchPoll();
   updateActionButtons();
+  if (t.status === "finished") {
+    loadFinalResults();
+  }
 }
 
 async function restoreSelectedTournament() {
@@ -502,7 +575,11 @@ async function loadFinalResults() {
     const lastRound = rounds[rounds.length - 1];
     const finalMatch = lastRound?.matches?.find((m: any) => m.status === "finished");
 
-    setFinalResults(formatFinalResultsFromBracket(finalMatch, data.leaderboard));
+    if (finalMatch) {
+      setFinalResults(formatFinalResultsFromBracket(finalMatch, data.leaderboard));
+    } else {
+      setFinalResults(formatFinalResultsFromLeaderboard(data.leaderboard));
+    }
   } catch (err: any) {
     setFinalResults("Failed to load final results: " + err.message);
   }
@@ -534,6 +611,18 @@ function formatFinalResultsFromBracket(finalMatch: any, leaderboard: any) {
     podiumLines.push(`🥉 Third: ${third.alias}`);
   }
 
+  if (!podiumLines.length) {
+    podiumLines.push("Tournament finished. Results unavailable.");
+  }
+  return podiumLines.join("\n");
+}
+
+function formatFinalResultsFromLeaderboard(leaderboard: any) {
+  const lb = leaderboard || [];
+  const podiumLines: string[] = [];
+  if (lb[0]?.alias) podiumLines.push(`🥇 Winner: ${lb[0].alias}`);
+  if (lb[1]?.alias) podiumLines.push(`🥈 Runner-up: ${lb[1].alias}`);
+  if (lb[2]?.alias) podiumLines.push(`🥉 Third: ${lb[2].alias}`);
   if (!podiumLines.length) {
     podiumLines.push("Tournament finished. Results unavailable.");
   }
