@@ -1,13 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { AddFriendSchema,
-        AddFriendType,
-        FriendActionSchema,
-        FriendActionType,
-        PendingFriendshipSchema,
-        PendingFriendshipType,
-        FriendListSchema,
-        FriendListType
-} from '../../shared/schemas/friends.schema';
+import * as S from '../../shared/schemas/friends.schema';
 
 // user->sender, friend->recipient
 interface Friendship {
@@ -21,8 +13,8 @@ interface Friendship {
 export default async function friendsRoutes(fastify: FastifyInstance) {
 
     // POST /friends - Send friend request
-    fastify.post<{ Body: AddFriendType }>('/friends', {
-        schema: { body: AddFriendSchema },
+    fastify.post<{ Body: S.AddFriendType }>('/friends', {
+        schema: { body: S.AddFriendSchema },
         preHandler: [fastify.authenticate]
     }, async (request, reply) => {
         const senderId = request.user!.userId;
@@ -75,9 +67,9 @@ export default async function friendsRoutes(fastify: FastifyInstance) {
     //patch /friends/:friendshioID - accept frienship request
     fastify.patch<{
         Params: { friendshipId: string },
-        Body: FriendActionType
+        Body: S.FriendActionType
     }>('/friends/:friendshipId', {
-        schema : { body: FriendActionSchema},
+        schema : { body: S.FriendActionSchema},
         preHandler: [fastify.authenticate]
     }, async (request, reply) => {
         const userId = request.user!.userId;
@@ -163,9 +155,9 @@ export default async function friendsRoutes(fastify: FastifyInstance) {
     });
 
     //get /friends/requests - pending incoming-outgoing friend requests
-    fastify.get<{ Reply: PendingFriendshipType | { error: string } }>('/friends/requests', {
+    fastify.get<{ Reply: S.PendingFriendshipType | { error: string } }>('/friends/requests', {
         schema: {
-            response: { 200: PendingFriendshipSchema }
+            response: { 200: S.PendingFriendshipSchema }
         },
         preHandler: [fastify.authenticate]
     }, async (request, reply) => {
@@ -184,7 +176,7 @@ export default async function friendsRoutes(fastify: FastifyInstance) {
                 JOIN users u ON f.user_id = u.id
                 WHERE f.friend_id = ? AND f.status = 'pending'
                 ORDER BY f.created_at DESC
-            `).all(userId) as PendingFriendshipType['incoming'];
+            `).all(userId) as S.PendingFriendshipType['incoming'];
 
             // get requests requests sent BY this user
             const outgoingRequests = fastify.db.prepare(`
@@ -198,7 +190,7 @@ export default async function friendsRoutes(fastify: FastifyInstance) {
                 JOIN users u ON f.friend_id = u.id
                 WHERE f.user_id = ? AND f.status = 'pending'
                 ORDER BY f.created_at DESC
-            `).all(userId) as PendingFriendshipType['outgoing'];
+            `).all(userId) as S.PendingFriendshipType['outgoing'];
 
             return reply.send({
                 incoming: incomingRequests,
@@ -212,9 +204,9 @@ export default async function friendsRoutes(fastify: FastifyInstance) {
     });
 
     //get /friends - get all accepted friends
-    fastify.get<{ Reply: FriendListType | { error: string } }>('/friends', {
+    fastify.get<{ Reply: S.FriendListType | { error: string } }>('/friends', {
         schema: {
-            response: { 200: FriendListSchema }
+            response: { 200: S.FriendListSchema }
         },
         preHandler: [fastify.authenticate]
     }, async (request, reply) => {
@@ -240,14 +232,49 @@ export default async function friendsRoutes(fastify: FastifyInstance) {
                 WHERE f.status = 'accepted'
                   AND (f.user_id = ? OR f.friend_id = ?)
                 ORDER BY u.display_name ASC
-            `).all(userId, userId, userId, userId) as FriendListType['friends'];
+            `).all(userId, userId, userId, userId) as S.FriendListType['friends'];
 
-            return reply.send({
-                friends: accepted_friends
-            });
+            return reply.send({ friends: accepted_friends });
 
         } catch (error: any) {
             fastify.log.error({ error: error.message, userId }, 'Failed to get friends list');
+            return reply.code(500).send({ error: 'Internal server error' });
+        }
+    });
+
+    // get /friends/online - get online friends
+    fastify.get<{ Reply: S.OnlineFriendsType | { error: string } }>('/friends/online', {
+        schema: {
+            response: { 200: S.OnlineFriendsSchema }
+        },
+        preHandler: [fastify.authenticate]
+    }, async (request, reply) => {
+        const userId = request.user!.userId;
+
+        try {
+            const online_friends = fastify.db.prepare(`
+                SELECT 
+                    u.id,
+                    u.display_name,
+                    u.avatar_url,
+                    u.last_seen
+                FROM friendships f
+                JOIN users u ON (
+                    CASE 
+                        WHEN f.user_id = ? THEN u.id = f.friend_id
+                        WHEN f.friend_id = ? THEN u.id = f.user_id
+                    END
+                )
+                WHERE f.status = 'accepted'
+                  AND (f.user_id = ? OR f.friend_id = ?)
+                  AND u.online = 1
+                ORDER BY u.display_name ASC
+            `).all(userId, userId, userId, userId) as S.OnlineFriendsType['online_friends'];
+
+            return reply.send({ online_friends });
+
+        } catch (error: any) {
+            fastify.log.error({ error: error.message, userId }, 'Failed to get online friends');
             return reply.code(500).send({ error: 'Internal server error' });
         }
     });

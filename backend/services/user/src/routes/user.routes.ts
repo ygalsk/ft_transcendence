@@ -50,4 +50,21 @@ export default async function userRoutes(fastify: FastifyInstance) {
 
     return { leaderboard: rows };
   });
+
+  // POST /user/logout - set user offline, when its called frontwnd must delete the token
+  fastify.post('/logout', {
+    preHandler: [fastify.authenticate]
+  }, async (request, reply) => {
+    const userId = request.user!.userId;
+
+    try {
+      fastify.db.prepare('UPDATE users SET online = 0 WHERE id = ?').run(userId);
+      
+      fastify.log.info({ userId }, 'User logged out');
+      return reply.send({ message: 'Logged out successfully.' });
+    } catch (error: any) {
+      fastify.log.error({ error: error.message, userId }, 'Failed to logout');
+      return reply.code(500).send({ error: 'Internal server error' });
+    }
+  });
 }
