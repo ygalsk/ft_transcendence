@@ -42,6 +42,7 @@ services:
     environment:
       - PORT=5000
       - DB_PATH=/usr/src/app/data/user.sqlite
+      - UPLOADS_DIR=/usr/src/app/data/avatars
       - JWT_SECRET=${JWT_SECRET:-default-secret-change-in-production}
       - SERVICE_JWT_SECRET=${SERVICE_JWT_SECRET:-default-service-secret-change-in-production}
     volumes:
