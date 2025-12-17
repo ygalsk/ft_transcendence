@@ -17,9 +17,9 @@ export default async function internalRoutes(fastify: FastifyInstance) {
 
     try {
       fastify.db.prepare(`
-        INSERT INTO users (id, email, display_name)
-        VALUES (?, ?, ?)
-      `).run(id, email, display_name);
+        INSERT INTO users (id, email, display_name, avatar_url)
+        VALUES (?, ?, ?, ?)
+      `).run(id, email, display_name, 'default.png');
 
       fastify.log.info({ userId: id, email }, 'User profile created');
       return reply.code(201).send({ message: 'Profile created' });

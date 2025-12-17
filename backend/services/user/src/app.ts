@@ -1,4 +1,5 @@
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
+import multipart from '@fastify/multipart';
 import fastify from 'fastify';
 import { join } from 'path';
 
@@ -12,6 +13,14 @@ import friendsRoutes from './routes/friends.routes';
 
 export function buildApp() {
   const app = fastify({ logger: true }).withTypeProvider<TypeBoxTypeProvider>();
+
+  //enable file upload w limits
+  app.register(multipart, {
+    limits : {
+      fileSize: 2 * 1024 * 1024, //2mb
+      files: 1 //one file per request
+    }
+  });
 
   // Database
   app.register(dbPlugin, {
