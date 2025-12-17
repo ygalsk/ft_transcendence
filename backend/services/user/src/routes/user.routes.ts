@@ -167,7 +167,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
       return reply.code(500).send({ error: 'Upload failed' });
     }
   });
-
+  
   //get /:userId/avatar -serve files
   fastify.get<{ Params: GetAvatarParamsType }>('/:userId/avatar', {
     schema: {
@@ -244,6 +244,23 @@ export default async function userRoutes(fastify: FastifyInstance) {
     } catch (error: any) {
       fastify.log.error({ error }, 'Failed to delete avatar file');
       return reply.code(500).send({ error: 'Failed to delete avatar file' });
+    }
+  });
+
+  // POST /user/logout - set user offline, when its called frontwnd must delete the token
+  fastify.post('/logout', {
+    preHandler: [fastify.authenticate]
+  }, async (request, reply) => {
+    const userId = request.user!.userId;
+  
+    try {
+      fastify.db.prepare('UPDATE users SET online = 0 WHERE id = ?').run(userId);
+      
+      fastify.log.info({ userId }, 'User logged out');
+      return reply.send({ message: 'Logged out successfully.' });
+    } catch (error: any) {
+      fastify.log.error({ error: error.message, userId }, 'Failed to logout');
+      return reply.code(500).send({ error: 'Internal server error' });
     }
   });
 }

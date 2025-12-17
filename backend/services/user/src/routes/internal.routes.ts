@@ -62,4 +62,27 @@ export default async function internalRoutes(fastify: FastifyInstance) {
       return reply.code(500).send({ error: 'Database error' });
     }
   });
+
+  // PATCH /internal/users/:userId/online - Update online status (internal only)
+  fastify.patch<{ 
+      Params: { userId: string },
+      Body: { online: boolean }
+  }>('/internal/users/:userId/online', async (request, reply) => {
+      const userId = parseInt(request.params.userId, 10);
+      const { online } = request.body;
+
+      if (isNaN(userId))
+          return reply.code(400).send({ error: 'Invalid user ID' });
+
+      try {
+          fastify.db.prepare('UPDATE users SET online = ? WHERE id = ?')
+              .run(online ? 1 : 0, userId);
+
+      fastify.log.info({ userId, online }, 'Online status updated');
+      return reply.send({ message: 'Online status updated' });
+    } catch (error: any) {
+      fastify.log.error({ error: error.message, userId }, 'Failed to update online status');
+      return reply.code(500).send({ error: 'Internal server error' });
+    }
+  });
 }
