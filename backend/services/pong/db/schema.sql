@@ -77,3 +77,4 @@ CREATE TABLE IF NOT EXISTS tournament_matches (
 CREATE INDEX IF NOT EXISTS idx_tournament_matches_tournament ON tournament_matches(tournament_id);
 CREATE INDEX IF NOT EXISTS idx_tournament_matches_status ON tournament_matches(status);
 CREATE INDEX IF NOT EXISTS idx_tournament_matches_pong_match ON tournament_matches(pong_match_id);
+CREATE INDEX IF NOT EXISTS idx_tournament_matches_lookup ON tournament_matches(tournament_id, round, match_index);
