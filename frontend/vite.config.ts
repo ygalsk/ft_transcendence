@@ -1,6 +1,6 @@
 // vite.config.ts
 import { defineConfig } from 'vite'
-import { resolve } from 'path'
+// import { resolve } from 'path'
 
 export default defineConfig({
   build: {
@@ -13,7 +13,8 @@ export default defineConfig({
         pongArena: './pong_arena.html',
         pong3d: './pong-3d.html',
         pongClient: './pong-client.html',
-        privacy: './privacy.html'
+        privacy: './privacy.html',
+        terms: './terms.html'
       },
     },
   },
