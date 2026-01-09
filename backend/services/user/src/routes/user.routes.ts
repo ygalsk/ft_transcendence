@@ -8,6 +8,7 @@ import { UpdateProfileSchema,
         GetAvatarParamsSchema,
         GetAvatarParamsType
 } from '../../shared/schemas/user.schema';
+import axios from 'axios';
 
 const AVATAR_DIR = process.env.UPLOADS_DIR || '/usr/src/app/data/avatars';
 const DEFAULT_AVATAR_PATH = join(AVATAR_DIR, 'default.png');
@@ -302,9 +303,9 @@ export default async function userRoutes(fastify: FastifyInstance) {
       if (user.avatar_url && user.avatar_url !== DEFAULT_AVATAR_URL) {
         const avatarPath = join(AVATAR_DIR, user.avatar_url);
         if (existsSync(avatarPath)) {
-            try {
-              unlinkSync(avatarPath);
-              fastify.log.info({ userId, avatar: user.avatar_url }, 'Deleted avatar file');
+          try {
+            unlinkSync(avatarPath);
+            fastify.log.info({ userId, avatar: user.avatar_url }, 'Deleted avatar file');
           } catch (error) {
             fastify.log.warn({ userId, error }, 'Failed to delete avatar file');
           }
@@ -315,9 +316,33 @@ export default async function userRoutes(fastify: FastifyInstance) {
       fastify.db.prepare('DELETE FROM users WHERE id = ?').run(userId);
       fastify.log.info({ userId }, 'Deleted user from database');
 
-      // Step 6: Call Auth Service to delete from auth DB
+      // Call Auth Service to delete from auth DB
+      try {
+        const authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://auth-service:4000';
+        const serviceSecret = process.env.SERVICE_SECRET || 'your-service-secret';
+        
+        // Direct service-to-service call (no /api/auth prefix)
+        const deleteUrl = `${authServiceUrl}/internal/users/${userId}`;
+        
+        fastify.log.info({ userId, url: deleteUrl }, 'Calling auth service to delete user');
+        
+        await axios.delete(deleteUrl, {
+          headers: {
+            'x-service-secret': serviceSecret
+          }
+        });
+        fastify.log.info({ userId }, 'Deleted user from auth service');
+      } catch (error: any) {
+        fastify.log.error({ 
+          userId, 
+          error: error.message,
+          response: error.response?.data,
+          status: error.response?.status 
+        }, 'Failed to delete from auth service');
+        return reply.code(500).send({ error: 'Failed to complete account deletion' });
+      }
 
-      return reply.send({ message: 'Account deleted successfully' });
+      return reply.code(204).send();
     } catch (error: any) {
       fastify.log.error({ error, userId: request.user?.userId }, 'Failed to delete account');
       return reply.code(500).send({ error: 'Failed to delete account' });

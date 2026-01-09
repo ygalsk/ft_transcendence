@@ -173,5 +173,53 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     return reply.send({ user });
   });
+
+  // Internal endpoint for user service to delete user from auth DB
+  fastify.delete('/internal/users/:userId', {
+    schema: {
+      params: {
+        type: 'object',
+        properties: {
+          userId: { type: 'number' }
+        },
+        required: ['userId']
+      },
+      response: {
+        200: { type: 'object', additionalProperties: true },
+        401: { type: 'object', additionalProperties: true },
+        404: { type: 'object', additionalProperties: true },
+        500: { type: 'object', additionalProperties: true }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      // Verify service-to-service secret
+      const serviceSecret = request.headers['x-service-secret'] as string;
+      const expectedSecret = process.env.SERVICE_SECRET || 'your-service-secret';
+
+      if (!serviceSecret || serviceSecret !== expectedSecret) {
+        fastify.log.warn('Unauthorized internal service call');
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      const { userId } = request.params as { userId: number };
+
+      // Check if user exists
+      const user = fastify.db.prepare('SELECT id FROM users WHERE id = ?').get(userId);
+
+      if (!user) {
+        return reply.code(404).send({ error: 'User not found' });
+      }
+
+      // Delete user from auth database
+      fastify.db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+      fastify.log.info({ userId }, 'Deleted user from auth service');
+
+      return reply.code(200).send({ message: 'Account deleted successfully'});
+    } catch (error: any) {
+      fastify.log.error({ error }, 'Failed to delete user from auth service');
+      return reply.code(500).send({ error: 'Internal server error' });
+    }
+  });
 }
 
