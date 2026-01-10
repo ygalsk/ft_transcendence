@@ -57,7 +57,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
 
     const user = fastify.db.prepare(`
-      SELECT id, email, display_name, avatar_url, bio, wins, losses
+      SELECT id, email, display_name, online, last_seen, avatar_url, bio, wins, losses
       FROM users WHERE id = ?
     `).get(id);
 

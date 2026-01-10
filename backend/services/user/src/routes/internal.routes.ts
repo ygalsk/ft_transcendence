@@ -67,7 +67,7 @@ export default async function internalRoutes(fastify: FastifyInstance) {
   fastify.patch<{ 
       Params: { userId: string },
       Body: { online: boolean }
-  }>('/internal/users/:userId/online', async (request, reply) => {
+  }>('/users/:userId/online', async (request, reply) => {
       const userId = parseInt(request.params.userId, 10);
       const { online } = request.body;
 
