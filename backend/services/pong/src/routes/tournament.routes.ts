@@ -266,3 +266,178 @@ function generateSeedOrder(size: number): number[] {
   const mirrored = half.map((s) => size + 1 - s);
   return half.flatMap((s, i) => [s, mirrored[i]]);
 }
+
+export default async function tournamentRoutes(fastify: FastifyInstance) {
+  // =======================================
+  // POST /tournaments — Create tournament
+  // (prefix is /tournaments from app.ts)
+  // =======================================
+  fastify.post<{ Body: CreateTournamentType }>(
+    "/",
+    {
+      schema: { body: CreateTournamentSchema },
+      preHandler: [fastify.authenticate],
+    },
+    async (request, reply) => {
+      const { userId } = request.user!;
+      const { name, max_players, is_public = true } = request.body;
+
+      // Enforce unique name among active tournaments (pending or running)
+      const conflict = fastify.db
+        .prepare(
+          `SELECT id FROM tournaments
+           WHERE name = ?
+             AND status IN ('pending', 'running')`
+        )
+        .get(name) as { id: number } | undefined;
+
+      if (conflict) {
+        return reply
+          .code(400)
+          .send({ error: "A pending/running tournament already uses that name" });
+      }
+
+      const result = fastify.db
+        .prepare(
+          `INSERT INTO tournaments (name, created_by, max_players, is_public)
+           VALUES (?, ?, ?, ?)`
+        )
+        .run(name, userId, max_players, is_public ? 1 : 0);
+
+      return reply.code(201).send({ id: result.lastInsertRowid });
+    }
+  );
+
+  // =======================================
+  // GET /tournaments — list tournaments
+  // ?status=open (default) => pending + running
+  // ?status=finished => recently finished (ordered by finished_at DESC)
+  // ?status=all => all statuses
+  // =======================================
+  fastify.get("/", async (request, reply) => {
+    const reqId = (request as any).id || "tournaments-list";
+    try {
+      const { status, q } = request.query as { status?: string; q?: string };
+      const filter = status || "open";
+      const like = q ? `%${q}%` : null;
+      fastify.log.info({ reqId, status: filter, q }, "Listing tournaments start");
+
+      let tournaments: any[] = [];
+      if (filter === "open") {
+        tournaments = fastify.db
+          .prepare(
+            `SELECT t.id, t.name, t.status, t.max_players, t.is_public,
+                    t.created_at, t.started_at, t.finished_at,
+                    (SELECT COUNT(*) FROM tournament_players tp WHERE tp.tournament_id = t.id) AS player_count
+             FROM tournaments t
+             WHERE t.status IN ('pending', 'running')
+               AND ( ? IS NULL OR t.name LIKE ? )
+             ORDER BY t.status ASC, t.created_at DESC
+             LIMIT 50`
+          )
+          .all(like, like) as any[];
+      } else if (filter === "finished") {
+        tournaments = fastify.db
+          .prepare(
+            `SELECT t.id, t.name, t.status, t.max_players, t.is_public,
+                    t.created_at, t.started_at, t.finished_at,
+                    (SELECT COUNT(*) FROM tournament_players tp WHERE tp.tournament_id = t.id) AS player_count
+             FROM tournaments t
+             WHERE t.status = 'finished'
+               AND ( ? IS NULL OR t.name LIKE ? )
+             ORDER BY t.finished_at DESC, t.created_at DESC
+             LIMIT 30`
+          )
+          .all(like, like) as any[];
+      } else {
+        tournaments = fastify.db
+          .prepare(
+            `SELECT t.id, t.name, t.status, t.max_players, t.is_public,
+                    t.created_at, t.started_at, t.finished_at,
+                    (SELECT COUNT(*) FROM tournament_players tp WHERE tp.tournament_id = t.id) AS player_count
+             FROM tournaments t
+             WHERE ( ? IS NULL OR t.name LIKE ? )
+             ORDER BY t.status ASC, t.created_at DESC
+             LIMIT 50`
+          )
+          .all(like, like) as any[];
+      }
+
+      const enriched: any[] = tournaments.map((t) => ({
+        id: t.id,
+        name: t.name,
+        status: t.status,
+        max_players: t.max_players,
+        is_public: !!t.is_public,
+        created_at: t.created_at,
+        started_at: t.started_at,
+        finished_at: t.finished_at,
+        player_count: t.player_count,
+        can_join: t.status === "pending" && t.player_count < t.max_players,
+      }));
+
+      if (filter === "finished" || filter === "all") {
+        // Enrich finished tournaments with podium aliases
+        const getFinalMatch = fastify.db.prepare(
+          `SELECT winner_id, left_player_id, right_player_id
+           FROM tournament_matches
+           WHERE tournament_id = ?
+           ORDER BY round DESC, match_index ASC
+           LIMIT 1`
+        );
+        const getAlias = fastify.db.prepare(
+          `SELECT alias FROM tournament_players WHERE tournament_id = ? AND user_id = ?`
+        );
+        const getTop3 = fastify.db.prepare(
+          `SELECT tp.user_id, tp.alias, tp.seed,
+                  SUM(CASE WHEN tm.winner_id = tp.user_id THEN 1 ELSE 0 END) AS wins,
+                  SUM(CASE WHEN tm.status = 'finished' AND tm.winner_id IS NOT NULL AND tm.winner_id != tp.user_id THEN 1 ELSE 0 END) AS losses
+           FROM tournament_players tp
+           LEFT JOIN tournament_matches tm
+             ON tm.tournament_id = tp.tournament_id
+            AND tm.status = 'finished'
+            AND (tm.left_player_id = tp.user_id OR tm.right_player_id = tp.user_id)
+           WHERE tp.tournament_id = ?
+           GROUP BY tp.user_id, tp.alias, tp.seed
+           ORDER BY wins DESC, losses ASC, tp.seed ASC
+           LIMIT 3`
+        );
+
+        enriched.forEach((t) => {
+          if (t.status !== "finished") return;
+          const finalMatch = getFinalMatch.get(t.id) as
+            | { winner_id: number | null; left_player_id: number | null; right_player_id: number | null }
+            | undefined;
+
+          let winnerAlias: string | null = null;
+          let runnerAlias: string | null = null;
+          if (finalMatch?.winner_id) {
+            winnerAlias = (getAlias.get(t.id, finalMatch.winner_id) as any)?.alias ?? null;
+            const runnerId =
+              finalMatch.winner_id === finalMatch.left_player_id
+                ? finalMatch.right_player_id
+                : finalMatch.left_player_id;
+            if (runnerId) {
+              runnerAlias = (getAlias.get(t.id, runnerId) as any)?.alias ?? null;
+            }
+          }
+
+          const lb = getTop3.all(t.id) as { alias: string }[];
+          const thirdAlias = lb[2]?.alias ?? null;
+
+          t.podium = {
+            winner: winnerAlias,
+            runner_up: runnerAlias,
+            third: thirdAlias,
+          };
+        });
+      }
+
+      fastify.log.info({ reqId, count: enriched.length, filter }, "Listing tournaments done");
+      return reply.send({ tournaments: enriched });
+    } catch (err: any) {
+      fastify.log.error({ reqId, err: err.message }, "Failed to list tournaments");
+      return reply.code(503).send({ error: "Service unavailable" });
+    }
+  });
+}
