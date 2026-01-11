@@ -181,3 +181,88 @@ function autoAdvanceByesLocal(fastify: any, tournamentId: number, maxRound?: num
       .run(tournamentId);
   }
 }
+
+// Resolve stalled matches (both players assigned, but still pending after a timeout)
+function resolveStalledMatches(
+  fastify: any,
+  tournamentId: number,
+  maxRound: number,
+  timeoutMs = 120_000
+) {
+  const stalled = fastify.db
+    .prepare(
+      `SELECT id, round, match_index, left_player_id, right_player_id, created_at
+       FROM tournament_matches
+       WHERE tournament_id = ?
+         AND status = 'pending'
+         AND left_player_id IS NOT NULL
+         AND right_player_id IS NOT NULL
+         AND (strftime('%s','now') - strftime('%s', created_at)) * 1000 > ?`
+    )
+    .all(tournamentId, timeoutMs) as any[];
+
+  if (!stalled.length) return;
+
+  const getSeedElo = fastify.db.prepare(
+    `SELECT tp.seed, u.elo
+     FROM tournament_players tp
+     JOIN users u ON u.id = tp.user_id
+     WHERE tp.tournament_id = ? AND tp.user_id = ?`
+  );
+
+  const finish = fastify.db.prepare(
+    `UPDATE tournament_matches
+     SET winner_id = ?, left_score = ?, right_score = ?,
+         status = 'finished', finished_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  );
+
+  for (const m of stalled) {
+    const leftInfo = getSeedElo.get(tournamentId, m.left_player_id) as
+      | { seed: number | null; elo: number }
+      | undefined;
+    const rightInfo = getSeedElo.get(tournamentId, m.right_player_id) as
+      | { seed: number | null; elo: number }
+      | undefined;
+
+    // Decide winner: lower seed wins; if seeds null, higher elo wins; fallback to lower user id
+    let winnerId = m.left_player_id;
+    if (leftInfo && rightInfo) {
+      const leftSeed = leftInfo.seed ?? Number.MAX_SAFE_INTEGER;
+      const rightSeed = rightInfo.seed ?? Number.MAX_SAFE_INTEGER;
+      if (leftSeed !== rightSeed) {
+        winnerId = leftSeed < rightSeed ? m.left_player_id : m.right_player_id;
+      } else if (leftInfo.elo !== rightInfo.elo) {
+        winnerId = leftInfo.elo >= rightInfo.elo ? m.left_player_id : m.right_player_id;
+      } else {
+        winnerId = Math.min(m.left_player_id, m.right_player_id);
+      }
+    }
+
+    finish.run(
+      winnerId,
+      0,
+      0,
+      m.id
+    );
+
+    advanceWinnerToNextMatch(
+      fastify,
+      tournamentId,
+      m.round,
+      m.match_index,
+      winnerId,
+      maxRound
+    );
+  }
+
+  autoAdvanceByesLocal(fastify, tournamentId);
+}
+
+// Standard bracket seeding order (e.g., 4 seeds: [1,4,3,2], 8 seeds: [1,8,4,5,3,6,2,7])
+function generateSeedOrder(size: number): number[] {
+  if (size === 1) return [1];
+  const half = generateSeedOrder(size / 2);
+  const mirrored = half.map((s) => size + 1 - s);
+  return half.flatMap((s, i) => [s, mirrored[i]]);
+}
