@@ -440,4 +440,187 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
       return reply.code(503).send({ error: "Service unavailable" });
     }
   });
+
+    // =======================================
+  // POST /tournaments/join — with alias
+  // =======================================
+  fastify.post<{ Body: JoinTournamentType }>(
+    "/join",
+    {
+      schema: { body: JoinTournamentSchema },
+      preHandler: [fastify.authenticate],
+    },
+    async (request, reply) => {
+      const { userId } = request.user!;
+      const { tournamentId, alias } = request.body;
+
+      const tournament = fastify.db
+        .prepare(
+          `SELECT id, status, max_players
+           FROM tournaments WHERE id = ?`
+        )
+        .get(tournamentId) as
+        | { id: number; status: string; max_players: number }
+        | undefined;
+
+      if (!tournament) {
+        return reply.code(404).send({ error: "Tournament not found" });
+      }
+
+      if (tournament.status !== "pending") {
+        return reply.code(400).send({ error: "Tournament already started" });
+      }
+
+      const count = fastify.db
+        .prepare(
+          `SELECT COUNT(*) AS count
+           FROM tournament_players WHERE tournament_id = ?`
+        )
+        .get(tournamentId) as { count: number };
+
+      if (count.count >= tournament.max_players) {
+        return reply.code(400).send({ error: "Tournament is full" });
+      }
+
+      try {
+        fastify.db
+          .prepare(
+            `INSERT INTO tournament_players (tournament_id, user_id, alias)
+             VALUES (?, ?, ?)`
+          )
+          .run(tournamentId, userId, alias);
+      } catch (err: any) {
+        if (err.code === "SQLITE_CONSTRAINT_PRIMARYKEY") {
+          return reply.code(409).send({ error: "Already joined" });
+        }
+        throw err;
+      }
+
+      return reply.send({ message: "Joined", alias });
+    }
+  );
+
+  // =======================================
+  // GET /tournaments/:id — overview
+  // =======================================
+  fastify.get("/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const tournament = fastify.db
+      .prepare(
+        `SELECT id, name, created_by, status, max_players, is_public,
+                created_at, started_at, finished_at
+         FROM tournaments
+         WHERE id = ?`
+      )
+      .get(id);
+
+    if (!tournament) {
+      return reply.code(404).send({ error: "Tournament not found" });
+    }
+
+    const players = fastify.db
+      .prepare(
+        `SELECT tp.user_id, tp.alias, u.elo, tp.seed
+         FROM tournament_players tp
+         JOIN users u ON u.id = tp.user_id
+         WHERE tp.tournament_id = ?
+         ORDER BY tp.seed IS NULL, tp.seed ASC`
+      )
+      .all(id);
+
+    return reply.send({ tournament, players });
+  });
+
+  // =======================================
+  // GET /tournaments/:id/bracket
+  // =======================================
+  fastify.get("/:id/bracket", async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const matchesRaw = fastify.db
+      .prepare(
+        `SELECT *
+         FROM tournament_matches
+         WHERE tournament_id = ?
+         ORDER BY round ASC, match_index ASC`
+      )
+      .all(id);
+
+    const getAlias = fastify.db.prepare(
+      `SELECT alias
+       FROM tournament_players
+       WHERE tournament_id = ? AND user_id = ?`
+    );
+
+    const matches = (matchesRaw as any[]).map((m) => ({
+      matchId: m.id,
+      round: m.round,
+      index: m.match_index,
+      status: m.status,
+      pong_match_id: m.pong_match_id,
+      winner_id: m.winner_id,
+      left:
+        m.left_player_id != null
+          ? {
+              userId: m.left_player_id,
+              alias: (getAlias.get(id, m.left_player_id) as any)?.alias ?? null,
+            }
+          : null,
+      right:
+        m.right_player_id != null
+          ? {
+              userId: m.right_player_id,
+              alias: (getAlias.get(id, m.right_player_id) as any)?.alias ?? null,
+            }
+          : null,
+      score:
+        m.left_score != null
+          ? { left: m.left_score, right: m.right_score }
+          : null,
+    }));
+
+    const grouped = matches.reduce((acc: any[], m) => {
+      let round = acc.find((r) => r.round === m.round);
+      if (!round) {
+        round = { round: m.round, matches: [] as any[] };
+        acc.push(round);
+      }
+      round.matches.push(m);
+      return acc;
+    }, []).sort((a, b) => a.round - b.round);
+
+    return reply.send({ matches, rounds: grouped });
+  });
+
+    // =======================================
+  // GET /tournaments/:id/leaderboard
+  // =======================================
+  fastify.get("/:id/leaderboard", async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const rows = fastify.db
+      .prepare(
+        `SELECT tp.user_id, tp.alias, tp.seed,
+                SUM(CASE WHEN tm.winner_id = tp.user_id THEN 1 ELSE 0 END) AS wins,
+                SUM(CASE WHEN tm.status = 'finished' AND tm.winner_id IS NOT NULL AND tm.winner_id != tp.user_id THEN 1 ELSE 0 END) AS losses
+         FROM tournament_players tp
+         LEFT JOIN tournament_matches tm
+           ON tm.tournament_id = tp.tournament_id
+          AND tm.status = 'finished'
+          AND (tm.left_player_id = tp.user_id OR tm.right_player_id = tp.user_id)
+         WHERE tp.tournament_id = ?
+         GROUP BY tp.user_id, tp.alias, tp.seed
+         ORDER BY wins DESC, losses ASC, tp.seed ASC`
+      )
+      .all(id) as {
+        user_id: number;
+        alias: string;
+        seed: number | null;
+        wins: number;
+        losses: number;
+      }[];
+
+    return reply.send({ leaderboard: rows });
+  });
 }
