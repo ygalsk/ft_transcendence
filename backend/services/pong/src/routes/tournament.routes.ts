@@ -623,4 +623,183 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
 
     return reply.send({ leaderboard: rows });
   });
+
+  // =======================================
+  // GET /tournaments/:id/current-round
+  // Returns the earliest round that still has pending/running matches,
+  // or the last finished round if the tournament is done.
+  // =======================================
+  fastify.get("/:id/current-round", async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const pending = fastify.db
+      .prepare(
+        `SELECT MIN(round) AS round
+         FROM tournament_matches
+         WHERE tournament_id = ?
+           AND status IN ('pending','running')`
+      )
+      .get(id) as { round: number | null };
+
+    if (pending.round != null) {
+      const roundNum = pending.round;
+      const matches = fastify.db
+        .prepare(
+          `SELECT *
+           FROM tournament_matches
+           WHERE tournament_id = ? AND round = ?
+           ORDER BY match_index ASC`
+        )
+        .all(id, roundNum);
+      return reply.send({ round: roundNum, matches });
+    }
+
+    // If no pending/running, return the last finished round (or null)
+    const lastFinished = fastify.db
+      .prepare(
+        `SELECT MAX(round) AS round
+         FROM tournament_matches
+         WHERE tournament_id = ?`
+      )
+      .get(id) as { round: number | null };
+
+    if (lastFinished.round != null) {
+      const roundNum = lastFinished.round;
+      const matches = fastify.db
+        .prepare(
+          `SELECT *
+           FROM tournament_matches
+           WHERE tournament_id = ? AND round = ?
+           ORDER BY match_index ASC`
+        )
+        .all(id, roundNum);
+      return reply.send({ round: roundNum, matches, status: "finished" });
+    }
+
+    return reply.code(404).send({ error: "No matches" });
+  });
+
+  // =======================================
+  // POST /tournaments/:id/start
+  // =======================================
+  fastify.post(
+    "/:id/start",
+    {
+      preHandler: [fastify.authenticate],
+    },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const userId = request.user!.userId;
+
+      const tournament = fastify.db
+        .prepare(
+          `SELECT id, created_by, status
+           FROM tournaments WHERE id = ?`
+        )
+        .get(id) as
+        | { id: number; created_by: number; status: string }
+        | undefined;
+
+      if (!tournament) {
+        return reply.code(404).send({ error: "Tournament not found" });
+      }
+
+      if (tournament.created_by !== userId) {
+        return reply.code(403).send({ error: "Forbidden" });
+      }
+
+      if (tournament.status !== "pending") {
+        return reply.code(400).send({ error: "Already started" });
+      }
+
+      const players = fastify.db
+        .prepare(
+          `SELECT tp.user_id, tp.alias, u.elo
+           FROM tournament_players tp
+           JOIN users u ON u.id = tp.user_id
+           WHERE tp.tournament_id = ?
+           ORDER BY u.elo DESC, u.id ASC`
+        )
+        .all(id) as { user_id: number; alias: string; elo: number }[];
+
+      if (players.length < 2) {
+        return reply.code(400).send({ error: "Not enough players" });
+      }
+
+      const tx = fastify.db.transaction(() => {
+        fastify.db
+          .prepare(
+            `UPDATE tournaments
+             SET status = 'running', started_at = CURRENT_TIMESTAMP
+             WHERE id = ?`
+          )
+          .run(id);
+
+        const seedStmt = fastify.db.prepare(
+          `UPDATE tournament_players
+           SET seed = ?
+           WHERE tournament_id = ? AND user_id = ?`
+        );
+
+        players.forEach((p, i) => seedStmt.run(i + 1, id, p.user_id));
+
+        const insertMatch = fastify.db.prepare(
+          `INSERT INTO tournament_matches
+           (tournament_id, round, match_index, left_player_id, right_player_id, pong_match_id, status)
+           VALUES (?, 1, ?, ?, ?, ?, 'pending')`
+        );
+
+        const fillMatch = (matchIndex: number, left: number | null, right: number | null) => {
+          const pongMatchId = `t${id}-r1-m${matchIndex}`;
+          insertMatch.run(
+            id,
+            matchIndex,
+            left,
+            right,
+            pongMatchId
+          );
+        };
+
+        // Bracket sizing: next power of two
+        const bracketSize = 1 << Math.ceil(Math.log2(players.length));
+        const maxRound = Math.ceil(Math.log2(bracketSize));
+        const seedOrder = generateSeedOrder(bracketSize);
+
+        // Map seed number to player (sorted by elo desc), fill remainder with null for BYEs
+        const seeds: (number | null)[] = Array(bracketSize).fill(null);
+        players.forEach((p, idx) => {
+          const seedNum = idx + 1;
+          const slot = seedOrder.findIndex((s) => s === seedNum);
+          if (slot >= 0) seeds[slot] = p.user_id;
+        });
+
+        // Round 1 pairing from seeded slots
+        let matchIndex = 0;
+        for (let i = 0; i < seeds.length; i += 2) {
+          fillMatch(matchIndex, seeds[i] ?? null, seeds[i + 1] ?? null);
+          matchIndex++;
+        }
+      });
+
+      tx();
+
+      // Process BYEs immediately so lone players advance
+      autoAdvanceByesLocal(fastify, Number(id), Math.ceil(Math.log2(players.length)));
+
+      const matches = fastify.db
+        .prepare(
+          `SELECT *
+           FROM tournament_matches
+           WHERE tournament_id = ? AND round = 1
+           ORDER BY match_index ASC`
+        )
+        .all(id);
+
+      return reply.send({
+        message: "Tournament started",
+        round: 1,
+        matches,
+      });
+    }
+  );
 }
