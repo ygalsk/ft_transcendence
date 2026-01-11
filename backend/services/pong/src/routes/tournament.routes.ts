@@ -802,4 +802,208 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
       });
     }
   );
+
+  // =======================================
+  // GET /tournaments/:id/round/:round
+  // =======================================
+  fastify.get("/:id/round/:round", async (request, reply) => {
+    const { id, round } = request.params as { id: string; round: string };
+    const roundNum = Number(round);
+
+    const matches = fastify.db
+      .prepare(
+        `SELECT *
+         FROM tournament_matches
+         WHERE tournament_id = ? AND round = ?
+         ORDER BY match_index ASC`
+      )
+      .all(id, roundNum);
+
+    if (!matches.length) {
+      return reply.code(404).send({ error: "No matches" });
+    }
+
+    const getAlias = fastify.db.prepare(
+      `SELECT alias
+       FROM tournament_players
+       WHERE tournament_id = ? AND user_id = ?`
+    );
+
+    const enriched = matches.map((m: any) => ({
+      matchId: m.id,
+      round: m.round,
+      index: m.match_index,
+      status: m.status,
+      pong_match_id: m.pong_match_id,
+      winner_id: m.winner_id,
+      left:
+        m.left_player_id != null
+          ? {
+              userId: m.left_player_id,
+              alias: (getAlias.get(id, m.left_player_id) as any)?.alias ?? null,
+            }
+          : null,
+      right:
+        m.right_player_id != null
+          ? {
+              userId: m.right_player_id,
+              alias: (getAlias.get(id, m.right_player_id) as any)?.alias ?? null,
+            }
+          : null,
+      score:
+        m.left_score != null
+          ? { left: m.left_score, right: m.right_score }
+          : null,
+    }));
+
+    return reply.send({
+      round: roundNum,
+      matches: enriched,
+    });
+  });
+
+  // =======================================
+  // GET /tournaments/:id/next-match
+  // =======================================
+  fastify.get("/:id/next-match", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { userId } = request.query as { userId?: string };
+    const tIdNum = Number(id);
+
+    if (!userId) {
+      return reply.code(400).send({ error: "userId required" });
+    }
+
+    const numericUserId = Number(userId);
+
+    const tournament = fastify.db
+      .prepare(
+        `SELECT id, status
+         FROM tournaments
+         WHERE id = ?`
+      )
+      .get(id) as { id: number; status: string } | undefined;
+
+    if (!tournament) {
+      return reply.code(404).send({ error: "Tournament not found" });
+    }
+
+    // If tournament has not started yet, just report waiting; avoid side effects before seeding
+    if (tournament.status === "pending") {
+      return reply.send({ status: "waiting" });
+    }
+
+    // Auto-advance any BYEs before deciding the next match
+    const playerCountRow = fastify.db
+      .prepare(
+        `SELECT COUNT(*) AS count FROM tournament_players WHERE tournament_id = ?`
+      )
+      .get(tIdNum) as { count: number };
+    const maxRound = Math.max(1, Math.ceil(Math.log2(Math.max(2, playerCountRow.count))));
+    // Resolve stalled matches (both assigned, but idle > timeout), then byes
+    resolveStalledMatches(fastify, tIdNum, maxRound);
+    autoAdvanceByesLocal(fastify, tIdNum, maxRound);
+
+    const getMatchesForPlayer = () =>
+      fastify.db
+        .prepare(
+          `SELECT *
+           FROM tournament_matches
+           WHERE tournament_id = ?
+             AND (left_player_id = ? OR right_player_id = ?)
+           ORDER BY round ASC, match_index ASC`
+        )
+        .all(id, numericUserId, numericUserId) as any[];
+
+    let matches = getMatchesForPlayer();
+
+    if (!matches.length) {
+      return reply.send({ status: "waiting" });
+    }
+
+    const getAlias = fastify.db.prepare(
+      `SELECT alias
+       FROM tournament_players
+       WHERE tournament_id = ? AND user_id = ?`
+    );
+
+    // Pending match first
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const pending = matches.find((m) => m.status === "pending");
+      if (!pending) break;
+
+      const isLeft = pending.left_player_id === numericUserId;
+      const opponentId = isLeft
+        ? pending.right_player_id
+        : pending.left_player_id;
+
+      const yourAliasRow = getAlias.get(id, numericUserId) as
+        | { alias: string }
+        | undefined;
+      const opponentAliasRow =
+        opponentId != null
+          ? (getAlias.get(id, opponentId) as { alias: string } | undefined)
+          : undefined;
+
+      // If opponent is missing, treat as BYE: auto-advance and re-evaluate
+      if (opponentId == null) {
+        autoAdvanceByesLocal(fastify, tIdNum);
+        matches = getMatchesForPlayer();
+        continue;
+      }
+
+      // Mark match as running to avoid repeated "ready" after players grab the link
+      fastify.db
+        .prepare(
+          `UPDATE tournament_matches SET status = 'running' WHERE id = ?`
+        )
+        .run(pending.id);
+
+      return reply.send({
+        status: "ready",
+        tournamentId: Number(id),
+        tournamentMatchId: pending.id,
+        matchKey: pending.pong_match_id, // 👈 use this as matchId for Pong
+        round: pending.round,
+        yourUserId: numericUserId,
+        yourAlias: yourAliasRow?.alias ?? null,
+        opponentUserId: opponentId ?? null,
+        opponentAlias: opponentAliasRow?.alias ?? null,
+      });
+    }
+
+    // Running match
+    const running = matches.find((m) => m.status === "running");
+    if (running) {
+      const isLeft = running.left_player_id === numericUserId;
+      const opponentId = isLeft
+        ? running.right_player_id
+        : running.left_player_id;
+      const yourAliasRow = getAlias.get(id, numericUserId) as
+        | { alias: string }
+        | undefined;
+      const opponentAliasRow =
+        opponentId != null
+          ? (getAlias.get(id, opponentId) as { alias: string } | undefined)
+          : undefined;
+
+      return reply.send({
+        status: "running",
+        tournamentId: Number(id),
+        tournamentMatchId: running.id,
+        matchKey: running.pong_match_id,
+        round: running.round,
+        yourUserId: numericUserId,
+        yourAlias: yourAliasRow?.alias ?? null,
+        opponentUserId: opponentId ?? null,
+        opponentAlias: opponentAliasRow?.alias ?? null,
+      });
+    }
+
+    if (tournament.status === "finished") {
+      return reply.send({ status: "finished" });
+    }
+
+    return reply.send({ status: "eliminated" });
+  });
 }
