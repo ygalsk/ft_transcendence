@@ -1,7 +1,6 @@
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import fastify from 'fastify';
 import { join } from 'path';
-import fastifyJwt from '@fastify/jwt';
 
 import dbPlugin from '../shared/plugins/db';
 import authPlugin from '../shared/plugins/auth';
@@ -11,6 +10,8 @@ import socketIOPlugin from '../shared/plugins/socketio';
 import pongSocketPlugin from './plugins/pong.socket';
 import matchRoutes from './routes/match.routes';
 //import tournamentRoutes from  './routes/tournament.routes';
+import internalTournamentRoutes from './routes/internal.tournament.routes';
+import tournamentRoutes from './routes/tournament.routes';
 
 export function buildApp() {
   const app = fastify({ logger: true }).withTypeProvider<TypeBoxTypeProvider>();
@@ -19,11 +20,6 @@ export function buildApp() {
   app.register(dbPlugin, {
     path: process.env.DB_PATH || '/data/pong.sqlite',
     schemaPath: join(__dirname, '../../db/schema.sql')
-  });
-
-  // JWT for WebSocket auth
-  app.register(fastifyJwt, {
-    secret: process.env.JWT_SECRET || 'supersecret'
   });
 
   // Auth plugin (for HTTP routes)
@@ -48,6 +44,8 @@ export function buildApp() {
 
   // Routes
   app.register(matchRoutes);
+  app.register(tournamentRoutes);
+  app.register(internalTournamentRoutes, { prefix: '/internal/tournaments' });
 
   // Health check
   app.get('/health', async () => {
