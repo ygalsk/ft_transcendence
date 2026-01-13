@@ -66,7 +66,7 @@ function buildHooks(
       removeRoom(roomId);
 
       if (tournamentId && tournamentMatchId) {
-        await reportTournamentMatch(fastify, payload, userServiceUrl);
+        await reportTournamentMatch(fastify, payload);
         return;
       }
 
