@@ -42,7 +42,7 @@ export function buildApp() {
   app.register(pongSocketPlugin);
 
   // Routes
-  app.register(matchRoutes);
+  app.register(matchRoutes, { prefix: '/pong'});
   app.register(tournamentRoutes, { prefix: '/tournaments'});
   app.register(internalTournamentRoutes, { prefix: '/internal/tournaments' });
 

@@ -12,10 +12,6 @@ import userRoutes from './routes/user.routes';
 import internalRoutes from './routes/internal.routes';
 import friendsRoutes from './routes/friends.routes';
 
-// 👇 ADD THESE TWO IMPORTS
-import tournamentRoutes from './routes/tournament.routes';
-import internalTournamentRoutes from './routes/internal.tournament.routes';
-
 export function buildApp() {
   const app = fastify({ logger: true }).withTypeProvider<TypeBoxTypeProvider>();
 

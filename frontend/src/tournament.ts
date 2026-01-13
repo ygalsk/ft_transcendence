@@ -134,7 +134,7 @@ async function loadTournaments(filter: "open" | "finished" = currentListFilter) 
   text("open_list_result", "Loading...");
   try {
     const q = ( $("search_name") as HTMLInputElement )?.value?.trim() || "";
-    const res = await fetchWithTimeout(`${API}/api/pong/?status=${filter}&q=${encodeURIComponent(q)}`, {
+    const res = await fetchWithTimeout(`${API}/api/pong/tournaments/?status=${filter}&q=${encodeURIComponent(q)}`, {
       headers: authHeader(),
     });
     const data = await res.json();
@@ -158,7 +158,7 @@ async function createTournament() {
 
   text("create_result", "Creating...");
   try {
-    const r = await fetchWithTimeout(`${API}/api/pong/`, {
+    const r = await fetchWithTimeout(`${API}/api/pong/tournaments/`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify({
@@ -184,7 +184,7 @@ async function joinTournament(id: number) {
 
   text("open_list_result", `Joining ${id}...`);
   try {
-    const r = await fetchWithTimeout(`${API}/api/pong/join`, {
+    const r = await fetchWithTimeout(`${API}/api/pong/tournaments/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify({ tournamentId: id, alias }),
@@ -207,7 +207,7 @@ async function goToMatch() {
   const userId = decoded.userId;
 
   text("selected_result", "Checking next match...");
-  const url = `${API}/api/pong/${selectedTournament.id}/next-match?userId=${userId}`;
+  const url = `${API}/api/pong/tournaments/${selectedTournament.id}/next-match?userId=${userId}`;
   try {
     const r = await fetchWithTimeout(url, { headers: authHeader() });
     const data = await r.json();
@@ -249,7 +249,7 @@ async function viewCurrentBracket() {
   if (table) table.textContent = "Loading current round...";
   try {
     const r = await fetchWithTimeout(
-      `${API}/api/pong/${selectedTournament.id}/bracket`,
+      `${API}/api/pong/tournaments/${selectedTournament.id}/bracket`,
       { headers: authHeader() }
     );
     const data = await r.json();
@@ -275,7 +275,7 @@ async function viewLeaderboard() {
   text("leaderboard_result", "Loading leaderboard...");
   try {
     const r = await fetchWithTimeout(
-      `${API}/api/pong/${selectedTournament.id}/leaderboard`,
+      `${API}/api/pong/tournaments/${selectedTournament.id}/leaderboard`,
       { headers: authHeader() }
     );
     const data = await r.json();
@@ -297,7 +297,7 @@ async function startTournament() {
   text("selected_result", "Starting...");
   try {
     const r = await fetchWithTimeout(
-      `${API}/api/pong/${selectedTournament.id}/start`,
+      `${API}/api/pong/tournaments/${selectedTournament.id}/start`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeader() },
@@ -430,7 +430,7 @@ async function restoreSelectedTournament() {
   const lastId = localStorage.getItem("lastTournamentId");
   if (!lastId) return;
   try {
-    const r = await fetchWithTimeout(`${API}/api/pong/${lastId}`, {
+    const r = await fetchWithTimeout(`${API}/api/pong/tournaments/${lastId}`, {
       headers: authHeader(),
     });
     if (!r.ok) return;
@@ -572,7 +572,7 @@ async function loadFinalResults() {
   if (!selectedTournament) return;
   try {
     const r = await fetch(
-      `${API}/api/pong/${selectedTournament.id}/leaderboard`,
+      `${API}/api/pong/tournaments/${selectedTournament.id}/leaderboard`,
       { headers: authHeader() }
     );
     const data = await r.json();

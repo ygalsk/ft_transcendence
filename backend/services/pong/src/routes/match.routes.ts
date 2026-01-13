@@ -9,19 +9,12 @@ import { MatchConfig } from "../game/types";
 export default async function matchRoutes(fastify: FastifyInstance) {
 
   // ------------------------------------
-  // Health check
-  // ------------------------------------
-  fastify.get("/pong/health", async () => {
-    return { status: "ok", service: "pong" };
-  });
-
-  // ------------------------------------
   // Create a casual match (HTTP API)
   // Useful for frontend tests
   // ------------------------------------
   fastify.post<{ 
     Body: { vsAi?: boolean; scoreLimit?: number } 
-  }>("/pong/match", async (request, reply) => {
+  }>("/match", async (request, reply) => {
     const { vsAi = false, scoreLimit = 11 } = request.body;
 
     const matchId = `casual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -45,7 +38,7 @@ export default async function matchRoutes(fastify: FastifyInstance) {
   // ------------------------------------
   // Get info about a given match/room
   // ------------------------------------
-  fastify.get<{ Params: { matchId: string } }>("/pong/match/:matchId", async (request, reply) => {
+  fastify.get<{ Params: { matchId: string } }>("/match/:matchId", async (request, reply) => {
     const { matchId } = request.params;
 
     const room = getRoom(matchId);
@@ -76,7 +69,7 @@ export default async function matchRoutes(fastify: FastifyInstance) {
   // ------------------------------------
   // List all active rooms (dev/debug only)
   // ------------------------------------
-  fastify.get("/pong/rooms", async () => {
+  fastify.get("/rooms", async () => {
     return Array.from(rooms.values()).map((room) => ({
       id: room.id,
       state: room.state,
@@ -92,7 +85,7 @@ export default async function matchRoutes(fastify: FastifyInstance) {
   // ------------------------------------
   // Fetch match history from DB (optional)
   // ------------------------------------
-  fastify.get("/pong/matches/history", async () => {
+  fastify.get("/matches/history", async () => {
     try {
       const stmt = fastify.db.prepare(`
         SELECT id, winner_id, loser_id, left_score, right_score, created_at
