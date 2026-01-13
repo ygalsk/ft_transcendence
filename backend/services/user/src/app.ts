@@ -52,15 +52,6 @@ export function buildApp() {
   app.register(internalRoutes, { prefix: '/internal' });
   app.register(friendsRoutes);
 
-  // NOTE: Previously we set per-request socket timeouts; removed to avoid mid-flight aborts.
-
-  // ⭐ NEW: public tournament routes (e.g. /tournaments, /tournaments/:id)
-  app.register(tournamentRoutes, { prefix: '/tournaments' });
-
-  // ⭐ NEW: internal tournament routes (called from pong-service)
-  // URLs like: /internal/tournaments/...
-  app.register(internalTournamentRoutes, { prefix: '/internal/tournaments' });
-
   // Health check
   app.get('/health', async () => {
     return { status: 'ok', service: 'user' };
