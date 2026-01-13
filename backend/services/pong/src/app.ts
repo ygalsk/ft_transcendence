@@ -9,7 +9,6 @@ import prometheusPlugin from '../shared/plugins/prometheus';
 import socketIOPlugin from '../shared/plugins/socketio';
 import pongSocketPlugin from './plugins/pong.socket';
 import matchRoutes from './routes/match.routes';
-//import tournamentRoutes from  './routes/tournament.routes';
 import internalTournamentRoutes from './routes/internal.tournament.routes';
 import tournamentRoutes from './routes/tournament.routes';
 
@@ -44,7 +43,7 @@ export function buildApp() {
 
   // Routes
   app.register(matchRoutes);
-  app.register(tournamentRoutes);
+  app.register(tournamentRoutes, { prefix: '/tournaments'});
   app.register(internalTournamentRoutes, { prefix: '/internal/tournaments' });
 
   // Health check
