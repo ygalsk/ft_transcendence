@@ -1,0 +1,103 @@
+frontend/
+├── .env.development              # Local dev config (git tracked)
+├── .env.production               # Production config (git tracked)
+├── .env.example                  # Documentation (git tracked)
+├── .gitignore                    # Ignore .env.local, node_modules, dist
+├── Dockerfile                    # Multi-stage build (Node → nginx)
+├── nginx.conf                    # SPA routing config for production
+├── vite.config.ts               # Vite configuration
+├── tsconfig.json                # TypeScript config (auto-generated)
+├── package.json                 # Dependencies (auto-generated)
+├── index.html                   # Single HTML entry point (auto-generated)
+│
+├── public/                      # Static assets (copied as-is to dist/)
+│   ├── favicon.ico
+│   └── robots.txt
+│
+└── src/                         # Source code
+    ├── main.tsx                 # App entry point (auto-generated)
+    ├── App.tsx                  # Root component
+    ├── App.css                  # Root styles
+    │
+    ├── config/                  # Configuration
+    │   └── api.ts              # API base URL & endpoints
+    │
+    ├── services/                # API layer (backend communication)
+    │   ├── api.ts              # Generic HTTP client (GET, POST, PUT, DELETE)
+    │   ├── auth.service.ts     # Auth API calls
+    │   ├── user.service.ts     # User API calls
+    │   └── pong.service.ts     # Pong API calls
+    │
+    ├── types/                   # TypeScript types/interfaces
+    │   ├── index.ts            # Re-export all types
+    │   ├── user.types.ts       # User-related types
+    │   ├── auth.types.ts       # Auth-related types
+    │   └── pong.types.ts       # Pong-related types
+    │
+    ├── hooks/                   # Custom React hooks
+    │   ├── useAuth.ts          # Authentication state/logic
+    │   ├── useUser.ts          # User data fetching
+    │   └── useApi.ts           # Generic API hook
+    │
+    ├── context/                 # React Context (global state)
+    │   ├── AuthContext.tsx     # Auth state provider
+    │   └── ThemeContext.tsx    # Theme/dark mode (optional)
+    │
+    ├── pages/                   # Page components (route targets)
+    │   ├── Home.tsx            # Landing page (/)
+    │   ├── Login.tsx           # Login page (/login)
+    │   ├── Profile.tsx         # User profile (/profile)
+    │   ├── Pong.tsx            # Pong game (/pong)
+    │   ├── PongArena.tsx       # Pong arena (/pong-arena)
+    │   ├── Pong3D.tsx          # 3D Pong (/pong-3d)
+    │   ├── Leaderboard.tsx     # Leaderboard (/leaderboard)
+    │   ├── Tournament.tsx      # Tournament (/tournament)
+    │   ├── Privacy.tsx         # Privacy policy (/privacy)
+    │   ├── Terms.tsx           # Terms of service (/terms)
+    │   └── NotFound.tsx        # 404 page
+    │
+    ├── components/              # Reusable components
+    │   ├── common/             # Generic UI components
+    │   │   ├── Button.tsx
+    │   │   ├── Input.tsx
+    │   │   ├── Card.tsx
+    │   │   ├── Modal.tsx
+    │   │   ├── Spinner.tsx
+    │   │   └── Avatar.tsx
+    │   │
+    │   ├── layout/             # Layout components
+    │   │   ├── Header.tsx
+    │   │   ├── Footer.tsx
+    │   │   ├── Sidebar.tsx
+    │   │   └── Layout.tsx      # Main layout wrapper
+    │   │
+    │   └── features/           # Feature-specific components
+    │       ├── auth/
+    │       │   ├── LoginForm.tsx
+    │       │   └── OAuth42Button.tsx
+    │       ├── profile/
+    │       │   ├── ProfileCard.tsx
+    │       │   ├── ProfileEdit.tsx
+    │       │   └── AvatarUpload.tsx
+    │       └── pong/
+    │           ├── PongCanvas.tsx
+    │           ├── PongControls.tsx
+    │           └── ScoreBoard.tsx
+    │
+    ├── routes/                  # Routing configuration
+    │   └── index.tsx           # React Router setup
+    │
+    ├── utils/                   # Helper functions
+    │   ├── format.ts           # Date/number formatting
+    │   ├── validation.ts       # Form validation
+    │   └── storage.ts          # LocalStorage helpers
+    │
+    ├── styles/                  # Global styles
+    │   ├── index.css           # Global CSS (auto-generated)
+    │   ├── variables.css       # CSS variables (colors, spacing)
+    │   └── reset.css           # CSS reset (optional)
+    │
+    └── assets/                  # Images, fonts, icons
+        ├── images/
+        │   └── logo.svg
+        └── fonts/
