@@ -1,7 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import type { Socket } from "socket.io";
+import jwt from "jsonwebtoken";
 import type { AuthUser as TokenUser } from "../../../shared/plugins/auth";
 import type { SocketUser } from "./types";
+
+const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
 
 export function decodeUserToken(
   fastify: FastifyInstance,
@@ -10,11 +13,8 @@ export function decodeUserToken(
   const token = socket.handshake.auth?.token;
   if (!token) return null;
 
-  const jwt = (fastify as any).jwt;
-  if (!jwt) return null;
-
   try {
-    const payload = jwt.verify(token) as TokenUser;
+    const payload = jwt.verify(token, JWT_SECRET) as TokenUser;
     return {
       userId: payload.userId,
       email: payload.email,
