@@ -2,21 +2,42 @@ FROM node:24-alpine AS builder
 
 WORKDIR /usr/src/app
 
-# Scaffold React app with Vite
+# Scaffold base app
 RUN npm install -g create-vite && \
-    create-vite . --template react-ts && \
-    npm install
+    create-vite temp --template react-ts && \
+    mv temp/* . && \
+    mv temp/.* . 2>/dev/null || true && \
+    rm -rf temp && \
+    npm install && \
+    npm install react-router-dom
 
-# Copy custom config files (overwrite defaults if they exist)
-COPY --chown=node:node nginx.conf ./nginx.conf
-COPY --chown=node:node vite.config.ts ./vite.config.ts
+# Remove default App files
+RUN rm -rf src/App.tsx src/App.css src/assets
 
-# Build the app
+# Copy OUR source code
+COPY src/ ./src/
+COPY vite.config.ts ./
+
+# Debug: show what we have
+RUN echo "=== Source structure ===" && \
+    find src -type f && \
+    echo "=== App.tsx ===" && \
+    cat src/App.tsx && \
+    echo "=== Routes ===" && \
+    cat src/routes/index.tsx
+
+# Build
 RUN npm run build
+
+# Show what was built
+RUN echo "=== Built files ===" && \
+    ls -la dist/ && \
+    echo "=== index.html ===" && \
+    cat dist/index.html
 
 FROM nginx:alpine
 COPY --from=builder /usr/src/app/dist /usr/share/nginx/html
-COPY --from=builder /usr/src/app/nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
