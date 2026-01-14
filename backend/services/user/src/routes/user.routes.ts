@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { pipeline } from 'stream/promises';
-import { createWriteStream, createReadStream, existsSync, mkdirSync, unlinkSync, copyFileSync } from 'fs';
+import { createWriteStream, createReadStream, existsSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { UpdateProfileSchema,
         UpdateProfileType,
@@ -17,40 +17,6 @@ const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png'];
 const MIME_TO_EXT = { 'image/jpeg': 'jpg', 'image/png': 'png'};
 
 export default async function userRoutes(fastify: FastifyInstance) {
-
-  // Compatibility: GET /users/:id (same handler as below)
-  fastify.get('/users/:id', async (request, reply) => {
-    const { id } = request.params as { id: string };
-
-    const user = fastify.db.prepare(`
-      SELECT id, email, display_name, avatar_url, bio, wins, losses
-      FROM users WHERE id = ?
-    `).get(id);
-
-    if (!user)
-      return reply.code(404).send({ error: 'User not found' });
-    
-    return reply.send(user);
-  });
-
-  //ensure upload dir exist
-  if (!existsSync(AVATAR_DIR)) {
-    mkdirSync(AVATAR_DIR, {recursive: true});
-    fastify.log.info(`Created uploads dir: ${AVATAR_DIR}`);
-  }
-
-  // Copy default avatar from assets if not already in uploads dir
-  if (!existsSync(DEFAULT_AVATAR_PATH)) {
-    const assetDefaultPath = join(__dirname, '../../../assets/default.png');
-    if (existsSync(assetDefaultPath)) {
-      try {
-        copyFileSync(assetDefaultPath, DEFAULT_AVATAR_PATH);
-        fastify. log.info('Copied default avatar to uploads directory');
-      } catch (error) {
-        fastify.log.error({ error }, 'Failed to copy default avatar');
-      }
-    }
-  }
 
   // GET /:id - Get user by ID
   fastify.get('/:id', async (request, reply) => {
@@ -168,8 +134,8 @@ export default async function userRoutes(fastify: FastifyInstance) {
     }
   });
   
-  //get /:userId/avatar -serve files
-  fastify.get<{ Params: GetAvatarParamsType }>('/:userId/avatar', {
+  //get /:id/avatar -serve files
+  fastify.get<{ Params: GetAvatarParamsType }>('/:id/avatar', {
     schema: {
       params: GetAvatarParamsSchema,
       response: {
