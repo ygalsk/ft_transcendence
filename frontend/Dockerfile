@@ -35,9 +35,10 @@ RUN echo "=== Built files ===" && \
     echo "=== index.html ===" && \
     cat dist/index.html
 
-FROM nginx:alpine
-COPY --from=builder /usr/src/app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+FROM node:24-alpine
+WORKDIR /usr/src/app
+COPY --from=builder /usr/src/app/dist ./dist
+RUN npm install -g vite
 EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["vite", "preview", "--host", "0.0.0.0", "--port", "80", "--base", "/"]
