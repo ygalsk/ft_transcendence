@@ -8,11 +8,14 @@ export const CreateProfileSchema = Type.Object({
 });
 
 // Schema for updating user profile
-export const UpdateProfileSchema = Type.Object({
-  display_name: Type.Optional(Type.String({ minLength: 1, maxLength: 50 })),
-  bio: Type.Optional(Type.String({ maxLength: 500 })),
-  avatar_url: Type.Optional(Type.String())
-});
+export const UpdateProfileSchema = Type.Partial(
+  Type.Object({
+  display_name: Type.String({ minLength: 1, maxLength: 50 }),
+  bio: Type.String({ minLength: 1, maxLength: 500 }),
+  avatar_url: Type.String()
+}),
+ { minProperties: 1 }
+);
 
 // Schema for recording match results
 export const MatchResultSchema = Type.Object({

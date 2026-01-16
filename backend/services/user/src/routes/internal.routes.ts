@@ -13,13 +13,13 @@ export default async function internalRoutes(fastify: FastifyInstance) {
       return reply.code(403).send({ error: 'Forbidden: Only auth service can create profiles' });
     }
 
-    const { id, email, display_name } = request.body;
+    const { id, email, display_name} = request.body;
 
     try {
       fastify.db.prepare(`
-        INSERT INTO users (id, email, display_name, avatar_url)
-        VALUES (?, ?, ?, ?)
-      `).run(id, email, display_name, 'default.png');
+        INSERT INTO users (id, email, display_name, bio, avatar_url)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(id, email, display_name, "Hi!", 'default.png');
 
       fastify.log.info({ userId: id, email }, 'User profile created');
       return reply.code(201).send({ message: 'Profile created' });
@@ -63,11 +63,11 @@ export default async function internalRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // PATCH /internal/users/:userId/online - Update online status (internal only)
+  // PATCH /internal/:userId/online - Update online status (internal only)
   fastify.patch<{ 
       Params: { userId: string },
       Body: { online: boolean }
-  }>('/users/:userId/online', async (request, reply) => {
+  }>('/:userId/online', async (request, reply) => {
       const userId = parseInt(request.params.userId, 10);
       const { online } = request.body;
 
