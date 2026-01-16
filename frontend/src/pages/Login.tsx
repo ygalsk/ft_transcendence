@@ -1,20 +1,25 @@
-import { useState } from 'react';
+import { useState, useContext } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/authService';
+import AuthContext from '../context/AuthContext';
 import '../styles/Login.css';
 
 export default function Login() {
   const navigate = useNavigate();
+  const { setUser } = useContext(AuthContext); // consume context setter
   const [form, setForm] = useState({ email: '', password: '', twofa: '' });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
   const [debugPayload, setDebugPayload] = useState<string | null>(null);
 
+  // ...exi
+
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
+
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -26,19 +31,28 @@ export default function Login() {
       const result = await authService.login(form.email, form.password, form.twofa || undefined);
       setDebugPayload(JSON.stringify(result, null, 2));
 
-      if (result.token) {
-        setMessage({ type: 'success', text: 'Login successful. Redirecting…' });
-        navigate('/');
-        return;
+      // Immediately hydrate context from /api/auth/me (cookie-based auth)
+      try {
+        const profile = await authService.me<Record<string, unknown>>();
+        const normalized =
+          (profile as any)?.user ??
+          (profile as any)?.data ??
+          profile;
+        setUser?.(normalized as any);
+      } catch {
+        // ignore; still redirect
       }
 
-      setMessage({ type: 'error', text: result.error ?? 'Login failed' });
+      setMessage({ type: 'success', text: 'Login successful. Redirecting…' });
+      navigate('/');
+      return;
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message ?? 'Unexpected error' });
     } finally {
       setLoading(false);
     }
   };
+
 
   const handleMe = async () => {
     try {

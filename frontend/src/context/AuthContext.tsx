@@ -30,7 +30,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     (async () => {
       try {
         const profile = await authService.me<Record<string, any>>();
-        if (mounted) setUser(profile as User);
+        if (!mounted) return;
+        // Normalize common shapes: {user}, {data}, or flat
+        const normalized =
+          (profile as any)?.user ??
+          (profile as any)?.data ??
+          profile;
+        setUser(normalized as User);
       } catch {
         if (mounted) setUser(null);
       } finally {
