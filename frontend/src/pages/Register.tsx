@@ -34,13 +34,26 @@ export default function Register() {
       setDebugPayload(JSON.stringify(result, null, 2));
 
       if (!(result as any).error) {
+        // Auto-login with the new account
+        try {
+          await authService.login(form.email, form.password, form.twofa || undefined);
+        } catch {
+          // ignore if login already set session via register
+        }
+
+        // Hydrate context and redirect
         try {
           const profile = await authService.me<Record<string, unknown>>();
-          setUser?.(profile as any);
+          const normalized =
+            (profile as any)?.user ??
+            (profile as any)?.data ??
+            profile;
+          setUser?.(normalized as any);
         } catch {
-          // ignore profile fetch failures
+          // ignore; still redirect
         }
-        setMessage({ type: 'success', text: 'Account created. Redirecting…' });
+
+        setMessage({ type: 'success', text: 'Account created. Logging you in…' });
         navigate('/');
         return;
       }
