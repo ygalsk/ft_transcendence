@@ -1,27 +1,14 @@
-import { useNavigate } from 'react-router-dom';
-import '../styles/Home.css';
+// import React from 'react';
+import Navbar from '../components/Navbar/Navbar';
+import { Outlet } from 'react-router-dom';
 
-function Home() {
-  const navigate = useNavigate();
-
+export default function App() {
   return (
-    <div className="home-container">
-      <div className="home-content">
-        <h1 className="home-title">
-          🏓 Pong Arena
-        </h1>
-        <p className="home-subtitle">
-          Challenge players worldwide in the ultimate Pong experience
-        </p>
-        <button 
-          className="login-button"
-          onClick={() => navigate('/login')}
-        >
-          Get Started
-        </button>
-      </div>
-    </div>
+    <>
+      <Navbar />
+      <main>
+        <Outlet />
+      </main>
+    </>
   );
 }
-
-export default Home;
