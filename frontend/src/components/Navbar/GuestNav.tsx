@@ -4,9 +4,7 @@ import { Link } from 'react-router-dom';
 const GuestNav: React.FC = () => {
   return (
     <ul className="navlist" role="menubar" aria-label="Guest navigation">
-      <li role="none">
-        <Link to="/" role="menuitem" className="navlink">Home</Link>
-      </li>
+      {/* Removed Home link */}
       <li role="none">
         <Link to="/game/guest" role="menuitem" className="navlink">Play Now</Link>
       </li>

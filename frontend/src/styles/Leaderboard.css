@@ -1,0 +1,52 @@
+.leaderboard-container {
+  max-width: 1000px;
+  margin: 24px auto;
+  padding: 0 16px;
+}
+
+.leaderboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.leaderboard-error {
+  color: #ff6b6b;
+  margin: 8px 0;
+}
+
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: rgba(16, 20, 44, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.leaderboard-table th,
+.leaderboard-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+}
+
+.leaderboard-table thead th {
+  font-weight: 600;
+  opacity: 0.9;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.leaderboard-table tbody tr:hover {
+  background: rgba(142, 122, 255, 0.08);
+}
+
+@media (max-width: 720px) {
+  .leaderboard-table th:nth-child(3),
+  .leaderboard-table td:nth-child(3),
+  .leaderboard-table th:nth-child(5),
+  .leaderboard-table td:nth-child(5) {
+    display: none;
+  }
+}

@@ -129,6 +129,15 @@
   font-size: 0.9rem;
 }
 
+.navbar {
+  width: 100%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.05));
+  position: sticky; /* keep visible on scroll */
+  top: 0;
+  z-index: 50;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
 /* Small screen adjustments */
 @media (max-width: 720px) {
   .navlist { gap: 8px; }
