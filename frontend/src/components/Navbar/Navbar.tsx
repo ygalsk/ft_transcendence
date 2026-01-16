@@ -29,10 +29,10 @@ const Navbar: React.FC = () => {
       <div className="navbar__inner">
         <div
           className="navbar__brand"
-          onClick={() => navigate(isAuthenticated ? '/dashboard' : '/')}
+          onClick={() => navigate('/')}
           role="button"
           tabIndex={0}
-          onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate(isAuthenticated ? '/dashboard' : '/')}
+          onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate('/')}
           aria-label="Go to home"
         >
           <span className="navbar__logo">🏓</span>

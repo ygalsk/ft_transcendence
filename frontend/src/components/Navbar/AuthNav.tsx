@@ -18,7 +18,7 @@ const AuthNav: React.FC<Props> = ({ user, onLogout }) => {
   return (
     <ul className="navlist" role="menubar" aria-label="User navigation">
       <li role="none">
-        <Link to="/dashboard" role="menuitem" className="navlink">Dashboard</Link>
+        <Link to="/leaderboard" role="menuitem" className="navlink">Leaderboard</Link>
       </li>
       <li role="none">
         <Link to="/game/ranked" role="menuitem" className="navlink">Play</Link>
