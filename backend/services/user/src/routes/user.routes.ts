@@ -41,8 +41,9 @@ export default async function userRoutes(fastify: FastifyInstance) {
     const { userId } = request.user!;
     const { display_name, bio, avatar_url } = request.body;
 
+    //CHECK LATER W FRONTEND
     //prevent setting avatar to null/empty, undefined will keep it same
-    const avatarUrl = avatar_url || undefined;
+    // const avatarUrl = avatar_url || undefined;
 
     fastify.db.prepare(`
       UPDATE users

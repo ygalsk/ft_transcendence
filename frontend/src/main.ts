@@ -118,17 +118,44 @@ document.addEventListener("DOMContentLoaded", () => {
 
   el("btn_update_profile")?.addEventListener("click", async () => {
     if (!JWT) return set("profile_result", "⚠️ Login first.");
-    const body = {
-      display_name: el("update_display").value,
-      bio: el("update_bio").value,
-    };
+    
+    const displayName = el("update_display").value;
+    const bio = el("update_bio").value;
+    
+    // Build body with only non-empty fields
+    const body: { display_name?: string, bio?: string } = {};
+    if (displayName && displayName.trim()) {
+      body.display_name = displayName.trim();
+    }
+    if (bio && bio.trim()) {
+      body.bio = bio.trim();
+    }
+    
+    // Check if at least one field is provided
+    if (Object.keys(body).length === 0) {
+      return set("profile_result", "⚠️ Enter at least one field to update.");
+    }
+    
+    set("profile_result", "Updating...");
     try {
       const r = await fetch(`${GATEWAY}/api/user/me`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...authHeader() },
         body: JSON.stringify(body),
       });
-      set("profile_result", JSON.stringify(await r.json(), null, 2));
+      
+      if (!r.ok) {
+        const error = await r.json();
+        set("profile_result", "❌ " + (error.message || 'Update failed'));
+        return;
+      }
+      
+      const json = await r.json();
+      set("profile_result", "✅ Updated!\n" + JSON.stringify(json, null, 2));
+      
+      // Clear inputs after successful update
+      el("update_display").value = "";
+      el("update_bio").value = "";
     } catch (err) {
       set("profile_result", "❌ " + err.message);
     }

@@ -92,13 +92,12 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     // Call User service to set online status
     try {
-      await axios.patch(`http://user-service:5000/internal/users/${user.id}/online`, {
+      await axios.patch(`http://user-service:5000/internal/${user.id}/online`, {
         online: true
       });
     } catch (err) {
       fastify.log.warn({ userId: user.id }, 'Failed to update online status');
     }
-
     return reply.send({
       token,
       user: {
