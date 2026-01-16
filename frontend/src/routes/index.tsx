@@ -5,6 +5,7 @@ import Login from '../pages/Login';
 import Register from '../pages/Register';
 import Leaderboard from '../pages/Leaderboard';
 import NotFound from '../pages/NotFound';
+import Play from '../pages/Play';
 
 export const router = createBrowserRouter([
   {
@@ -15,6 +16,8 @@ export const router = createBrowserRouter([
       { path: 'login', element: <Login /> },
       { path: 'register', element: <Register /> },
       { path: 'leaderboard', element: <Leaderboard /> },
+      { path: 'game/guest', element: <Play /> },
+      { path: 'game/ranked', element: <Play /> },
       { path: '*', element: <NotFound /> },
     ],
   },

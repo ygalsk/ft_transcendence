@@ -1,0 +1,7 @@
+.play-container { max-width: 1000px; margin: 24px auto; padding: 0 16px; }
+.play-header { display:flex; align-items:center; justify-content:space-between; }
+.play-actions { display:flex; gap: 8px; }
+.play-stage { position: relative; width: 800px; max-width: 100%; margin: 16px 0; }
+.play-stage canvas { width: 100%; height: auto; display: block; background: #000; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; }
+.play-overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; font-size: 72px; color: #fff; background: rgba(0,0,0,0.2); }
+.play-status { margin-top: 8px; opacity: 0.9; }

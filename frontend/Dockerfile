@@ -9,7 +9,8 @@ RUN npm install -g create-vite && \
     mv temp/.* . 2>/dev/null || true && \
     rm -rf temp && \
     npm install && \
-    npm install react-router-dom
+    npm install react-router-dom && \
+    npm install socket.io-client    
 
 # Remove default App files
 RUN rm -rf src/App.tsx src/App.css src/assets
@@ -38,6 +39,9 @@ RUN echo "=== Built files ===" && \
 
 FROM node:24-alpine
 WORKDIR /usr/src/app
+
+
+
 COPY --from=builder /usr/src/app/dist ./dist
 RUN npm install -g vite
 EXPOSE 80
