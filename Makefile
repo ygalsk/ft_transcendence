@@ -1,7 +1,7 @@
 .PHONY: dev up down clean
 
 dev up:
-	docker compose up --build
+	docker compose up -d --build 
 
 down:
 	docker compose down
