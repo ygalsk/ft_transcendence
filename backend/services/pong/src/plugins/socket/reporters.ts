@@ -16,7 +16,7 @@ export async function reportTournamentMatch(
   const baseUrl = `http://localhost:${process.env.PONG_PORT || 6061}`;
   async function attemptOnce() {
     const token = generateServiceToken("pong");
-    return await fetch(`${baseUrl}/internal/match-complete`, {
+    return await fetch(`${baseUrl}/internal/tournaments/match-complete`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
