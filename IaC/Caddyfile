@@ -31,7 +31,10 @@ https://transcendence.keystone-gateway.dev {
        }
    }
    handle {
-       reverse_proxy frontend:80
+       root * /srv/frontend
+       encode gzip
+       try_files {path} /index.html
+       file_server
    }
 }
 
@@ -66,6 +69,9 @@ https://transcendence.keystone-gateway.dev {
 #         }
 #     }
 #     handle {
-#         reverse_proxy frontend:80
+#         root * /srv/frontend
+#         encode gzip
+#         try_files {path} /index.html
+#         file_server
 #     }
 # }

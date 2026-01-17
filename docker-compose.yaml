@@ -1,8 +1,8 @@
 services:
   caddy:
     build:
-      context: ./IaC
-      dockerfile: Dockerfile.caddy
+      context: .
+      dockerfile: IaC/Dockerfile.caddy
     ports:
       - "80:80"
       - "443:443"
@@ -15,7 +15,6 @@ services:
       - auth-service
       - user-service
       - pong-service
-      - frontend
 
   auth-service:
     build:
@@ -48,17 +47,6 @@ services:
       - user-data:/usr/src/app/data
     networks:
       - backend
-
-  frontend:
-    build: ./frontend
-    # ports:
-    #   - "3000:80" 
-    networks:
-      - backend
-    depends_on:
-      - auth-service
-      - user-service
-      - pong-service
 
   pong-service:
     build:

@@ -1,9 +1,29 @@
-FROM caddy:builder AS builder
+# Stage 1: Build the React frontend
+FROM node:24-alpine AS frontend-builder
+WORKDIR /usr/src/app
 
-RUN xcaddy build \
-    --with github.com/mholt/caddy-ratelimit
+RUN npm install -g create-vite && \
+    create-vite temp --template react-ts && \
+    mv temp/* . && \
+    mv temp/.* . 2>/dev/null || true && \
+    rm -rf temp && \
+    npm install && \
+    npm install react-router-dom && \
+    npm install socket.io-client
 
+RUN rm -rf src/App.tsx src/App.css src/assets
+
+COPY frontend/src/ ./src/
+COPY frontend/vite.config.ts ./
+
+RUN npm run build
+
+# Stage 2: Build Caddy with plugins
+FROM caddy:builder AS caddy-builder
+RUN xcaddy build --with github.com/mholt/caddy-ratelimit
+
+# Stage 3: Final image
 FROM caddy:alpine
-
-COPY --from=builder /usr/bin/caddy /usr/bin/caddy
-COPY Caddyfile /etc/caddy/Caddyfile
+COPY --from=caddy-builder /usr/bin/caddy /usr/bin/caddy
+COPY IaC/Caddyfile /etc/caddy/Caddyfile
+COPY --from=frontend-builder /usr/src/app/dist /srv/frontend

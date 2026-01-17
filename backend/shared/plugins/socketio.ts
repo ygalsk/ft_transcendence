@@ -5,9 +5,9 @@ import jwt from 'jsonwebtoken';
 import { AuthUser } from './auth';
 import type { Server as HTTPServer } from 'node:http';
 
-const JWT_SECRET = process.env.JWT_SECRET;
+if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
 
-if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
+const JWT_SECRET: string = process.env.JWT_SECRET;
 
 export interface SocketData {
   user: (AuthUser & { display_name?: string }) | null;
