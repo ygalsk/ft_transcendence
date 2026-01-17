@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useContext } from 'react';
 import { io, Socket } from 'socket.io-client';
+import AuthContext from '../context/AuthContext';
 import '../styles/Play.css';
 
 type GameState = {
@@ -10,6 +11,7 @@ type GameState = {
 };
 
 type Phase = 'idle' | 'searching' | 'in_match';
+type Side = 'left' | 'right';
 
 export default function Play() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -19,6 +21,14 @@ export default function Play() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [phase, setPhase] = useState<Phase>('idle');
   const [status, setStatus] = useState<string>('Connecting…');
+  const [aiDifficulty, setAiDifficulty] = useState<'easy' | 'medium' | 'hard'>('easy');
+
+  // UI scoreboard state
+  const scoreRef = useRef<{ left: number; right: number }>({ left: 0, right: 0 });
+  const [score, setScore] = useState<{ left: number; right: number }>({ left: 0, right: 0 });
+  const [youSide, setYouSide] = useState<Side | null>(null);
+  const [leftName, setLeftName] = useState<string>('You');
+  const [rightName, setRightName] = useState<string>('Opponent');
 
   // immediate, synchronous guards
   const phaseRef = useRef<Phase>('idle');
@@ -28,14 +38,31 @@ export default function Play() {
   const matchId = qs.get('matchId') || qs.get('match') || null;
   const tournamentId = qs.get('tId') || qs.get('tid') || null;
   const tournamentMatchId = qs.get('mId') || qs.get('tmid') || null;
-  const yourAlias = qs.get('alias') || 'You';
-  const opponentAlias = qs.get('opponent') || 'Opponent';
+  const yourAliasFromQuery = qs.get('alias') || 'You';
+  const opponentAliasFromQuery = qs.get('opponent') || 'Opponent';
   const isTournament = !!(matchId && tournamentId && tournamentMatchId);
 
+  const auth = useContext(AuthContext) as any;
+  const user = auth?.user;
+  const aliasFromUser =
+    user?.display_name ??
+    (user as any)?.user?.display_name ??
+    (user as any)?.data?.display_name ??
+    null;
+
+  const youAlias = aliasFromUser || yourAliasFromQuery || 'You';
+  const isRankedRoute = window.location.pathname.includes('/game/ranked');
+
   useEffect(() => {
+    // init names before connect
+    setLeftName(isTournament ? yourAliasFromQuery : youAlias);
+    setRightName(isTournament ? opponentAliasFromQuery : 'Opponent');
+
+    const token = localStorage.getItem('jwt') || localStorage.getItem('token') || null;
     const socket: Socket = io('/', {
       path: '/socket.io',
-      withCredentials: true, // allow cookie auth
+      withCredentials: true,
+      auth: token ? { token } : {},
     });
     socketRef.current = socket;
 
@@ -66,6 +93,8 @@ export default function Play() {
       ctx.setLineDash([10, 10]);
       ctx.beginPath();
       ctx.moveTo(canvas.width / 2, 0);
+      ctx.lineTo(canvas.height / 2 + canvas.width / 2 - canvas.height / 2, canvas.height); // ensure full height line
+      ctx.moveTo(canvas.width / 2, 0);
       ctx.lineTo(canvas.width / 2, canvas.height);
       ctx.stroke();
       ctx.setLineDash([]);
@@ -79,28 +108,24 @@ export default function Play() {
       // paddles
       ctx.fillRect(20, state.paddles.left.y, 10, state.paddles.left.height);
       ctx.fillRect(canvas.width - 30, state.paddles.right.y, 10, state.paddles.right.height);
-
-      // score
-      ctx.font = '24px Arial';
-      ctx.fillText(String(state.score.left), canvas.width / 2 - 50, 40);
-      ctx.fillText(String(state.score.right), canvas.width / 2 + 30, 40);
     };
 
     const emitJoinMatch = () => {
-      if (!isTournament) return;
-      socket.emit('join_match', {
+      const s = socketRef.current;
+      if (!s || !isTournament) return;
+      s.emit('join_match', {
         matchId,
         tournamentId: Number(tournamentId),
         tournamentMatchId: Number(tournamentMatchId),
-        alias: yourAlias,
+        alias: youAlias,
+        ranked: true,
       });
     };
 
-    // listeners
     socket.on('connect', () => {
       if (isTournament) {
         setPhaseSafe('searching');
-        setStatus(`Joining tournament match <b>${matchId}</b>...<br>${yourAlias} vs ${opponentAlias}`);
+        setStatus(`Joining tournament match <b>${matchId}</b>...<br>${yourAliasFromQuery} vs ${opponentAliasFromQuery}`);
         emitJoinMatch();
       } else {
         setPhaseSafe('idle');
@@ -117,7 +142,12 @@ export default function Play() {
     socket.on('connect_error', (e: Error) => setStatus(e?.message || 'Connection error'));
     socket.on('error', (e: any) => setStatus(e?.message || 'Server error'));
 
-    socket.on('match_ready', ({ startAt }: { startAt: number }) => {
+    socket.on('match_ready', ({ startAt, players }: { startAt: number; players?: any }) => {
+      // Update names if server sends them
+      if (players?.left?.displayName || players?.right?.displayName) {
+        setLeftName(players.left?.displayName || leftName);
+        setRightName(players.right?.displayName || rightName);
+      }
       setPhaseSafe('searching');
       clearTimer();
       const tick = () => {
@@ -137,10 +167,28 @@ export default function Play() {
     });
 
     socket.on('match_start', (info: Record<string, any>) => {
+      // info.you likely 'left' | 'right'
+      if (info?.you === 'left' || info?.you === 'right') {
+        setYouSide(info.you);
+        // set names if provided
+        if (info.players?.left?.displayName || info.players?.right?.displayName) {
+          setLeftName(info.players.left?.displayName || leftName);
+          setRightName(info.players.right?.displayName || rightName);
+        } else if (!isTournament) {
+          // Casual: if vs AI, show difficulty
+          const maybeAI =
+            info.mode === 'ai' || info.vsAi
+              ? `AI (${aiDifficultyLabel(aiDifficulty)})`
+              : 'Opponent';
+          const youIsLeft = info.you === 'left';
+          setLeftName(youIsLeft ? youAlias : maybeAI);
+          setRightName(youIsLeft ? maybeAI : youAlias);
+        }
+      }
       setPhaseSafe('in_match');
       clearTimer();
       setCountdown(null);
-      joinLockRef.current = false; // unlock; joined successfully
+      joinLockRef.current = false;
       setStatus(`<b>Match Started</b><br>You are: <b>${info.you}</b><br>Opponent: ${info.opponent}<br>Mode: ${info.mode}`);
     });
 
@@ -149,17 +197,24 @@ export default function Play() {
       clearTimer();
       setCountdown(null);
       joinLockRef.current = false;
-      const leftName = end.players?.left?.displayName || (isTournament ? yourAlias : 'Left');
-      const rightName = end.players?.right?.displayName || (isTournament ? opponentAlias : 'Right');
-      const winner = end.winnerSide === 'left' ? leftName : rightName;
+      const leftN = end.players?.left?.displayName || leftName;
+      const rightN = end.players?.right?.displayName || rightName;
+      const winner = end.winnerSide === 'left' ? leftN : rightN;
       setStatus(
-        `<b>Match Finished</b><br>Winner: ${winner}<br>Final Score: ${end.score.left} - ${end.score.right}<br>${leftName} vs ${rightName}`
+        `<b>Match Finished</b><br>Winner: ${winner}<br>Final Score: ${end.score.left} - ${end.score.right}<br>${leftN} vs ${rightN}`
       );
     });
 
     socket.on('state', (state: GameState) => {
-      // ignore any state when not in match/searching to avoid ghost draws
       if (phaseRef.current === 'idle') return;
+      // update scoreboard when score changes
+      if (
+        state.score.left !== scoreRef.current.left ||
+        state.score.right !== scoreRef.current.right
+      ) {
+        scoreRef.current = { ...state.score };
+        setScore({ ...state.score });
+      }
       draw(state);
       switch (state.state) {
         case 'waiting':
@@ -203,23 +258,47 @@ export default function Play() {
       socketRef.current = null;
       joinLockRef.current = false;
       phaseRef.current = 'idle';
+      setYouSide(null);
     };
-  }, [isTournament, matchId, tournamentId, tournamentMatchId, yourAlias, opponentAlias]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTournament, matchId, tournamentId, tournamentMatchId, yourAliasFromQuery, opponentAliasFromQuery, youAlias]);
+
+  const aiDifficultyLabel = (d: 'easy' | 'medium' | 'hard') =>
+    d === 'medium' ? 'Medium' : d === 'hard' ? 'Hard' : 'Easy';
 
   const requestJoin = (payload: any) => {
     const socket = socketRef.current;
     if (!socket) return;
-
-    // hard guard against rapid clicks
     if (joinLockRef.current || phaseRef.current !== 'idle') return;
+
     joinLockRef.current = true;
     phaseRef.current = 'searching';
     setPhase('searching');
     setStatus('Joining queue…');
 
-    // leave first, then join (serialize with ack/timeout)
+    // map 'medium' -> 'normal' for server compatibility
+    const serverDifficulty =
+      payload?.difficulty === 'medium' ? 'normal' : payload?.difficulty;
+
+    const base = {
+      ...payload,
+      difficulty: serverDifficulty,
+      ranked: isRankedRoute,
+      alias: youAlias,
+    };
+
+    // Pre-set names for casual vs AI
+    if (base.vsAi && !isTournament) {
+      const aiName = `AI (${aiDifficultyLabel(aiDifficulty)})`;
+      setLeftName(youAlias);
+      setRightName(aiName);
+      setScore({ left: 0, right: 0 });
+      scoreRef.current = { left: 0, right: 0 };
+      setYouSide('left');
+    }
+
     socket.timeout(2000).emit('leave_match', () => {
-      socket.timeout(5000).emit('join_casual', payload, (ack?: { error?: string }) => {
+      socket.timeout(5000).emit('join_casual', base, (ack?: { error?: string }) => {
         if (ack && ack.error) {
           setStatus(`Failed to join: ${ack.error}`);
           phaseRef.current = 'idle';
@@ -227,7 +306,6 @@ export default function Play() {
           joinLockRef.current = false;
           return;
         }
-        // wait for match_ready/match_start events
       });
     });
   };
@@ -242,7 +320,31 @@ export default function Play() {
     setCountdown(null);
     setStatus('Left match. Select a mode.');
     joinLockRef.current = false;
+    // reset UI
+    setScore({ left: 0, right: 0 });
+    scoreRef.current = { left: 0, right: 0 };
+    setYouSide(null);
+    setLeftName(youAlias);
+    setRightName('Opponent');
+    const c = canvasRef.current;
+    const ctx = c?.getContext('2d');
+    if (c && ctx) ctx.clearRect(0, 0, c.width, c.height);
   };
+
+  const difficultyButton = (value: 'easy' | 'medium' | 'hard', label: string) => (
+    <button
+      key={value}
+      className={`seg ${aiDifficulty === value ? 'seg--active' : ''}`}
+      onClick={() => setAiDifficulty(value)}
+      disabled={phase !== 'idle'}
+      aria-pressed={aiDifficulty === value}
+    >
+      {label}
+    </button>
+  );
+
+  const youScore = youSide ? score[youSide] : score.left;
+  const oppScore = youSide ? score[youSide === 'left' ? 'right' : 'left'] : score.right;
 
   return (
     <section className="play-container">
@@ -250,19 +352,26 @@ export default function Play() {
         <h1>Play</h1>
         {!isTournament && (
           <div className="play-actions">
+            <div className="segmented">
+              {difficultyButton('easy', 'Easy')}
+              {difficultyButton('medium', 'Medium')}
+              {difficultyButton('hard', 'Hard')}
+            </div>
             <button
               className="btn btn--primary"
-              onClick={() => requestJoin({ vsAi: true, difficulty: 'easy' })}
+              onClick={() => requestJoin({ vsAi: true, difficulty: aiDifficulty })}
               disabled={phase !== 'idle'}
+              title="Play against AI"
             >
-              Vs AI (easy)
+              Play vs AI
             </button>
             <button
               className="btn btn--ghost"
               onClick={() => requestJoin({ vsAi: false })}
               disabled={phase !== 'idle'}
+              title="Matchmaking vs human"
             >
-              Vs Human
+              Play vs Human
             </button>
             <button className="btn" onClick={leaveMatch} disabled={phase === 'idle'}>
               Leave
@@ -271,6 +380,26 @@ export default function Play() {
         )}
       </header>
 
+      {/* Scoreboard */}
+      <div className="play-scoreboard">
+        <div className="player-card player-card--left">
+          <div className="avatar">{leftName.charAt(0).toUpperCase()}</div>
+          <div className="meta">
+            <div className="name">{leftName}</div>
+            <div className="score">{youSide ? (youSide === 'left' ? youScore : oppScore) : score.left}</div>
+          </div>
+        </div>
+        <div className="vs">VS</div>
+        <div className="player-card player-card--right">
+          <div className="meta meta--right">
+            <div className="name">{rightName}</div>
+            <div className="score">{youSide ? (youSide === 'left' ? oppScore : youScore) : score.right}</div>
+          </div>
+          <div className="avatar">{rightName.charAt(0).toUpperCase()}</div>
+        </div>
+      </div>
+
+      {/* Stage */}
       <div className="play-stage">
         <canvas ref={canvasRef} id="gameCanvas" width={800} height={500} />
         {countdown && countdown > 0 && <div className="play-overlay">{countdown}</div>}
