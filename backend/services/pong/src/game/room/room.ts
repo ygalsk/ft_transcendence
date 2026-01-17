@@ -210,6 +210,19 @@ export class Room {
 
   private finishMatch = (winnerSide: PlayerSide, reason: MatchEndReason): void => {
     if (this.state === "finished") return;
+
+    // If one player is disconnected, they lose regardless of score or original reason
+    const leftConnected = this.players.left?.connected ?? false;
+    const rightConnected = this.players.right?.connected ?? false;
+
+    if (!leftConnected && rightConnected) {
+      winnerSide = "right";
+      reason = "disconnect";
+    } else if (leftConnected && !rightConnected) {
+      winnerSide = "left";
+      reason = "disconnect";
+    }
+
     this.state = "finished";
     this.startAt = null;
     if (this.noShowTimer) {
