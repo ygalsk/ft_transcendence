@@ -18,7 +18,6 @@ function parseMatchKey(matchId: string): { tournamentId: number; round: number; 
 
 async function isTournamentMatchFinished(
   fastify: any,
-  userServiceUrl: string,
   tournamentId: number,
   tournamentMatchId: number,
   matchId: string
@@ -28,7 +27,7 @@ async function isTournamentMatchFinished(
 
   try {
     const res = await fetch(
-      `${userServiceUrl}/tournaments/${tournamentId}/round/${parsed.round}`
+      `${process.env.USER_SERVICE_URL}/tournaments/${tournamentId}/round/${parsed.round}`
     );
     if (!res.ok) return false;
     const data = (await res.json()) as { matches?: any[] };
@@ -48,7 +47,6 @@ async function isTournamentMatchFinished(
 export async function handleJoinMatch(
   ctx: SocketContext,
   payload: JoinMatchPayload,
-  userServiceUrl: string,
   defaultScoreLimit: number
 ): Promise<void> {
   const { fastify, socket, user, session } = ctx;
@@ -68,7 +66,6 @@ export async function handleJoinMatch(
   if (tournamentId && tournamentMatchId) {
     const finished = await isTournamentMatchFinished(
       fastify,
-      userServiceUrl,
       tournamentId,
       tournamentMatchId,
       matchId
@@ -139,7 +136,7 @@ export async function handleJoinMatch(
       tournamentId,
       tournamentMatchId,
     };
-    room = setupRoom(fastify, matchId, config, userServiceUrl);
+    room = setupRoom(fastify, matchId, config);
   }
 
   const side = room.addHumanPlayer({

@@ -57,7 +57,7 @@ export default fp(async function pongSocketPlugin(fastify: FastifyInstance) {
       );
 
       socket.on("join_match", (payload: JoinMatchPayload) =>
-        handleJoinMatch(ctx, payload, USER_SERVICE_URL, DEFAULT_SCORE_LIMIT)
+        handleJoinMatch(ctx, payload, DEFAULT_SCORE_LIMIT)
       );
 
       socket.on("input", (data: InputPayload) => handleInput(ctx, data));

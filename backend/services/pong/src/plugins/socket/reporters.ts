@@ -4,7 +4,8 @@ import type { MatchFinishedPayload } from "../../game/room";
 
 export async function reportTournamentMatch(
   fastify: FastifyInstance,
-  payload: MatchFinishedPayload
+  payload: MatchFinishedPayload,
+  // userServiceUrl: string
 ): Promise<void> {
   const { tournamentId, tournamentMatchId, winnerSide, score, leftPlayer, rightPlayer } = payload;
 
@@ -15,7 +16,7 @@ export async function reportTournamentMatch(
   const baseUrl = `http://localhost:${process.env.PONG_PORT || 6061}`;
   async function attemptOnce() {
     const token = generateServiceToken("pong");
-    return await fetch(`${baseUrl}/internal/tournaments/match-complete`, {
+    return await fetch(`${baseUrl}/internal/match-complete`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -32,6 +33,43 @@ export async function reportTournamentMatch(
       }),
     });
   }
+
+    // Report to user-service for stats update
+  const winner = winnerSide === "left" ? leftPlayer : rightPlayer;
+  const loser = winnerSide === "left" ? rightPlayer : leftPlayer;
+
+  if (winner?.userId && loser?.userId) {
+    try {
+      const token = generateServiceToken("pong");
+      const response = await fetch(`${process.env.USER_SERVICE_URL}/internal/match-result`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Service ${token}`,
+        },
+        body: JSON.stringify({
+          winnerId: winner.userId,
+          loserId: loser.userId,
+          leftScore: score.left,
+          rightScore: score.right,
+        }),
+      });
+
+      if (!response.ok) {
+        fastify.log.error(
+          { status: response.status, statusText: response.statusText, tournamentMatchId },
+          "Failed to report tournament match to user-service"
+        );
+      } else
+        fastify.log.info({ tournamentMatchId }, "Tournament match reported to user-service");
+    } catch (err: any) {
+      fastify.log.error(
+        { err: err.message, tournamentMatchId },
+        "Error reporting tournament match to user-service"
+      );
+    }
+  } else
+    fastify.log.warn({ tournamentMatchId }, "Skipping user-service report (no clear winner/loser)");
 
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -69,7 +107,7 @@ export async function reportTournamentMatch(
 export async function reportCasualMatch(
   fastify: FastifyInstance,
   payload: MatchFinishedPayload,
-  userServiceUrl: string
+  // userServiceUrl: string
 ): Promise<void> {
   const { winnerSide, score, leftPlayer, rightPlayer } = payload;
 
@@ -95,7 +133,7 @@ export async function reportCasualMatch(
   // Report to user-service
   try {
     const token = generateServiceToken("pong");
-    const response = await fetch(`${userServiceUrl}/internal/match-result`, {
+    const response = await fetch(`${process.env.USER_SERVICE_URL}/internal/match-result`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
