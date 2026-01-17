@@ -3,7 +3,6 @@ import '../styles/Leaderboard.css';
 
 type Player = {
   display_name: string;
-  elo?: number;
   wins?: number;
   losses?: number;
 };
@@ -53,7 +52,6 @@ export default function Leaderboard() {
           <tr>
             <th>#</th>
             <th>Player</th>
-            <th>ELO</th>
             <th>Wins</th>
             <th>Losses</th>
           </tr>
@@ -68,7 +66,6 @@ export default function Leaderboard() {
               <tr key={`${p.display_name}-${i}`}>
                 <td>{i + 1}</td>
                 <td>{p.display_name}</td>
-                <td>{p.elo ?? '—'}</td>
                 <td>{p.wins ?? 0}</td>
                 <td>{p.losses ?? 0}</td>
               </tr>
