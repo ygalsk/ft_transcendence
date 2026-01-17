@@ -9,13 +9,20 @@ type GameState = {
   score: { left: number; right: number };
 };
 
+type Phase = 'idle' | 'searching' | 'in_match';
+
 export default function Play() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const overlayRef = useRef<HTMLDivElement | null>(null);
-  const statusRef = useRef<HTMLParagraphElement | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [status, setStatus] = useState<string>('Connecting…');
+
+  // immediate, synchronous guards
+  const phaseRef = useRef<Phase>('idle');
+  const joinLockRef = useRef(false);
 
   const qs = useMemo(() => new URLSearchParams(window.location.search), []);
   const matchId = qs.get('matchId') || qs.get('match') || null;
@@ -28,13 +35,13 @@ export default function Play() {
   useEffect(() => {
     const socket: Socket = io('/', {
       path: '/socket.io',
-      withCredentials: true,
-      // transports: ['websocket'], // allow polling → upgrade
+      withCredentials: true, // allow cookie auth
     });
     socketRef.current = socket;
 
-    const setStatus = (msg: string) => {
-      if (statusRef.current) statusRef.current.innerHTML = msg;
+    const setPhaseSafe = (p: Phase) => {
+      phaseRef.current = p;
+      setPhase(p);
     };
 
     const clearTimer = () => {
@@ -54,6 +61,7 @@ export default function Play() {
       ctx.fillStyle = 'black';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+      // center dashed line
       ctx.strokeStyle = '#333';
       ctx.setLineDash([10, 10]);
       ctx.beginPath();
@@ -62,14 +70,17 @@ export default function Play() {
       ctx.stroke();
       ctx.setLineDash([]);
 
+      // ball
       ctx.fillStyle = 'white';
       ctx.beginPath();
       ctx.arc(state.ball.position.x, state.ball.position.y, 8, 0, Math.PI * 2);
       ctx.fill();
 
+      // paddles
       ctx.fillRect(20, state.paddles.left.y, 10, state.paddles.left.height);
       ctx.fillRect(canvas.width - 30, state.paddles.right.y, 10, state.paddles.right.height);
 
+      // score
       ctx.font = '24px Arial';
       ctx.fillText(String(state.score.left), canvas.width / 2 - 50, 40);
       ctx.fillText(String(state.score.right), canvas.width / 2 + 30, 40);
@@ -85,19 +96,29 @@ export default function Play() {
       });
     };
 
+    // listeners
     socket.on('connect', () => {
       if (isTournament) {
+        setPhaseSafe('searching');
         setStatus(`Joining tournament match <b>${matchId}</b>...<br>${yourAlias} vs ${opponentAlias}`);
         emitJoinMatch();
       } else {
+        setPhaseSafe('idle');
         setStatus('Connected. Select a mode.');
       }
+    });
+
+    socket.on('disconnect', () => {
+      setPhaseSafe('idle');
+      setStatus('Disconnected. Reconnecting…');
+      joinLockRef.current = false;
     });
 
     socket.on('connect_error', (e: Error) => setStatus(e?.message || 'Connection error'));
     socket.on('error', (e: any) => setStatus(e?.message || 'Server error'));
 
     socket.on('match_ready', ({ startAt }: { startAt: number }) => {
+      setPhaseSafe('searching');
       clearTimer();
       const tick = () => {
         const msLeft = startAt - Date.now();
@@ -115,15 +136,19 @@ export default function Play() {
       timerRef.current = setInterval(tick, 250);
     });
 
-    socket.on('match_start', (info: any) => {
+    socket.on('match_start', (info: Record<string, any>) => {
+      setPhaseSafe('in_match');
       clearTimer();
       setCountdown(null);
+      joinLockRef.current = false; // unlock; joined successfully
       setStatus(`<b>Match Started</b><br>You are: <b>${info.you}</b><br>Opponent: ${info.opponent}<br>Mode: ${info.mode}`);
     });
 
     socket.on('match_end', (end: any) => {
+      setPhaseSafe('idle');
       clearTimer();
       setCountdown(null);
+      joinLockRef.current = false;
       const leftName = end.players?.left?.displayName || (isTournament ? yourAlias : 'Left');
       const rightName = end.players?.right?.displayName || (isTournament ? opponentAlias : 'Right');
       const winner = end.winnerSide === 'left' ? leftName : rightName;
@@ -133,16 +158,9 @@ export default function Play() {
     });
 
     socket.on('state', (state: GameState) => {
+      // ignore any state when not in match/searching to avoid ghost draws
+      if (phaseRef.current === 'idle') return;
       draw(state);
-      if (overlayRef.current) {
-        if (countdown && countdown > 0) {
-          overlayRef.current.textContent = String(countdown);
-          overlayRef.current.style.display = 'flex';
-        } else {
-          overlayRef.current.textContent = '';
-          overlayRef.current.style.display = 'none';
-        }
-      }
       switch (state.state) {
         case 'waiting':
           setStatus('Waiting for opponent to join... keep this page open.');
@@ -173,14 +191,58 @@ export default function Play() {
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
 
-  return () => {
+    return () => {
+      if (socket.connected) {
+        socket.emit('cancel_search');
+        socket.emit('leave_match');
+      }
       clearTimer();
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       socket.close();
       socketRef.current = null;
+      joinLockRef.current = false;
+      phaseRef.current = 'idle';
     };
-  }, [isTournament, matchId, tournamentId, tournamentMatchId, yourAlias, opponentAlias]); // removed countdown
+  }, [isTournament, matchId, tournamentId, tournamentMatchId, yourAlias, opponentAlias]);
+
+  const requestJoin = (payload: any) => {
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    // hard guard against rapid clicks
+    if (joinLockRef.current || phaseRef.current !== 'idle') return;
+    joinLockRef.current = true;
+    phaseRef.current = 'searching';
+    setPhase('searching');
+    setStatus('Joining queue…');
+
+    // leave first, then join (serialize with ack/timeout)
+    socket.timeout(2000).emit('leave_match', () => {
+      socket.timeout(5000).emit('join_casual', payload, (ack?: { error?: string }) => {
+        if (ack && ack.error) {
+          setStatus(`Failed to join: ${ack.error}`);
+          phaseRef.current = 'idle';
+          setPhase('idle');
+          joinLockRef.current = false;
+          return;
+        }
+        // wait for match_ready/match_start events
+      });
+    });
+  };
+
+  const leaveMatch = () => {
+    const socket = socketRef.current;
+    if (!socket) return;
+    socket.emit('cancel_search');
+    socket.emit('leave_match');
+    phaseRef.current = 'idle';
+    setPhase('idle');
+    setCountdown(null);
+    setStatus('Left match. Select a mode.');
+    joinLockRef.current = false;
+  };
 
   return (
     <section className="play-container">
@@ -190,15 +252,20 @@ export default function Play() {
           <div className="play-actions">
             <button
               className="btn btn--primary"
-              onClick={() => socketRef.current?.emit('join_casual', { vsAi: true, difficulty: 'easy' })}
+              onClick={() => requestJoin({ vsAi: true, difficulty: 'easy' })}
+              disabled={phase !== 'idle'}
             >
               Vs AI (easy)
             </button>
             <button
               className="btn btn--ghost"
-              onClick={() => socketRef.current?.emit('join_casual', { vsAi: false })}
+              onClick={() => requestJoin({ vsAi: false })}
+              disabled={phase !== 'idle'}
             >
               Vs Human
+            </button>
+            <button className="btn" onClick={leaveMatch} disabled={phase === 'idle'}>
+              Leave
             </button>
           </div>
         )}
@@ -206,10 +273,10 @@ export default function Play() {
 
       <div className="play-stage">
         <canvas ref={canvasRef} id="gameCanvas" width={800} height={500} />
-        <div ref={overlayRef} id="countdownOverlay" className="play-overlay" />
+        {countdown && countdown > 0 && <div className="play-overlay">{countdown}</div>}
       </div>
 
-      <p ref={statusRef} id="status" className="play-status">Connecting…</p>
+      <p className="play-status" dangerouslySetInnerHTML={{ __html: status }} />
     </section>
   );
 }
