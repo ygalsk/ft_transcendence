@@ -33,7 +33,7 @@ export class CasualMatchmaker {
         aiDifficulty: difficulty,
       };
 
-      const room = setupRoom(fastify, matchId, config, this.userServiceUrl);
+      const room = setupRoom(fastify, matchId, config);
       const side: PlayerSide | null = room.addHumanPlayer({
         socketId: socket.id,
         userId: user.userId,
@@ -93,7 +93,7 @@ export class CasualMatchmaker {
       enableAi: false,
     };
 
-    const room = setupRoom(fastify, matchId, config, this.userServiceUrl);
+    const room = setupRoom(fastify, matchId, config);
 
     const p1Side = room.addHumanPlayer({
       socketId: p1.id,

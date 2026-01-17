@@ -8,15 +8,13 @@ export function setupRoom(
   fastify: FastifyInstance,
   matchId: string,
   config: MatchConfig,
-  userServiceUrl: string
 ): Room {
-  return createRoom(matchId, config, buildHooks(fastify, matchId, userServiceUrl));
+  return createRoom(matchId, config, buildHooks(fastify, matchId));
 }
 
 function buildHooks(
   fastify: FastifyInstance,
   roomId: string,
-  userServiceUrl: string
 ): RoomHooks {
   return {
     log: (level, message, meta) => (fastify.log as any)[level](meta || {}, message),
@@ -70,7 +68,7 @@ function buildHooks(
         return;
       }
 
-      await reportCasualMatch(fastify, payload, userServiceUrl);
+      await reportCasualMatch(fastify, payload);
     },
   };
 }
