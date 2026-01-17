@@ -52,7 +52,7 @@ export async function handleJoinMatch(
   defaultScoreLimit: number
 ): Promise<void> {
   const { fastify, socket, user, session } = ctx;
-  const { matchId, scoreLimit, tournamentId, tournamentMatchId, alias } = payload;
+  const { matchId, scoreLimit, tournamentId, tournamentMatchId } = payload;
 
   if (!matchId) {
     socket.emit("error", { message: "matchId is required" });
@@ -80,8 +80,6 @@ export async function handleJoinMatch(
   }
 
   const displayName = getDisplayName(user);
-  const playerName = tournamentId ? alias || displayName : displayName;
-
   let room = getRoom(matchId);
 
   // --------------------------------------------
@@ -147,7 +145,7 @@ export async function handleJoinMatch(
   const side = room.addHumanPlayer({
     socketId: socket.id,
     userId: user.userId,
-    displayName: playerName,
+    displayName: displayName,
     avatarUrl: undefined,
   });
 

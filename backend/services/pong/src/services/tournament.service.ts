@@ -30,11 +30,11 @@ export class TournamentService {
 
     const playersRaw = this.db
       .prepare(
-        `SELECT user_id, alias FROM tournament_players
+        `SELECT user_id, display_name FROM tournament_players
          WHERE tournament_id = ?
          ORDER BY RANDOM()`
       )
-      .all(tournamentId) as { user_id: number; alias: string }[];
+      .all(tournamentId) as { user_id: number; display_name: string }[];
 
     if (playersRaw.length < 2)
       throw new Error('Not enough players');

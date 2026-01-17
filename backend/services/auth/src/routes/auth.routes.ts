@@ -88,7 +88,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       }
     }
 
-    const token = generateToken(user.id, user.email);
+    const token = generateToken(user.id, user.email, user.display_name);
 
     // Call User service to set online status
     try {

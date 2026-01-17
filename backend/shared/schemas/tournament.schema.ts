@@ -13,12 +13,11 @@ export const CreateTournamentSchema = Type.Object({
 export type CreateTournamentType = Static<typeof CreateTournamentSchema>;
 
 // ============================
-// Join Tournament (with alias)
+// Join Tournament
 // ============================
 
 export const JoinTournamentSchema = Type.Object({
   tournamentId: Type.Integer({ minimum: 1 }),
-  alias: Type.String({ minLength: 1, maxLength: 32 }), // ⭐ NEW
 });
 
 export type JoinTournamentType = Static<typeof JoinTournamentSchema>;

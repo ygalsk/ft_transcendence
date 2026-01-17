@@ -2,16 +2,19 @@ import fp from 'fastify-plugin';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import jwt from 'jsonwebtoken';
 
-if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
-if (!process.env.SERVICE_JWT_SECRET) throw new Error('SERVICE_JWT_SECRET environment variable is required');
+const JWT_SECRET_RAW = process.env.JWT_SECRET;
+const SERVICE_JWT_SECRET_RAW = process.env.SERVICE_JWT_SECRET;
 
-const JWT_SECRET: string = process.env.JWT_SECRET;
-const SERVICE_JWT_SECRET: string = process.env.SERVICE_JWT_SECRET;
+if (!JWT_SECRET_RAW) throw new Error('JWT_SECRET environment variable is required');
+if (!SERVICE_JWT_SECRET_RAW) throw new Error('SERVICE_JWT_SECRET environment variable is required');
+
+const JWT_SECRET: string = JWT_SECRET_RAW;
+const SERVICE_JWT_SECRET: string = SERVICE_JWT_SECRET_RAW;
 
 export interface AuthUser {
   userId: number;
   email: string;
-  display_name?: string;
+  display_name: string;
 }
 
 export interface ServiceAuthPayload {
@@ -89,8 +92,8 @@ async function authPlugin(fastify: FastifyInstance) {
 export default fp(authPlugin);
 
 // Utility function for user token generation
-export function generateToken(userId: number, email: string): string {
-  return jwt.sign({ userId, email }, JWT_SECRET, { expiresIn: '7d' });
+export function generateToken(userId: number, email: string, display_name: string): string {
+  return jwt.sign({ userId, email, display_name }, JWT_SECRET, { expiresIn: '7d' });
 }
 
 // Utility function for service token generation

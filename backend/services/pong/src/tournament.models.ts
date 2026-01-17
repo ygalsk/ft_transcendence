@@ -9,7 +9,6 @@ export interface TournamentMatchReport {
 export interface TournamentRegistration {
   tournamentId: number;
   userId: number;
-  alias?: string;
 }
 
 export interface TournamentMatchSeed {

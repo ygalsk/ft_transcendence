@@ -14,6 +14,7 @@ declare module "fastify" {
     user?: {
       userId: number;
       email: string;
+      display_name: string;
     };
 
     // For inter-service auth (set by authenticateService)
