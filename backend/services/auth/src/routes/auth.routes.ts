@@ -194,7 +194,12 @@ export default async function authRoutes(fastify: FastifyInstance) {
     try {
       // Verify service-to-service secret
       const serviceSecret = request.headers['x-service-secret'] as string;
-      const expectedSecret = process.env.SERVICE_SECRET || 'your-service-secret';
+      const expectedSecret = process.env.SERVICE_SECRET;
+
+      if (!expectedSecret) {
+        fastify.log.error('SERVICE_SECRET environment variable is required');
+        return reply.code(500).send({ error: 'Server configuration error' });
+      }
 
       if (!serviceSecret || serviceSecret !== expectedSecret) {
         fastify.log.warn('Unauthorized internal service call');

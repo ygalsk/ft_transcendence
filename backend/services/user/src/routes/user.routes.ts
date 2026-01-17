@@ -286,7 +286,12 @@ export default async function userRoutes(fastify: FastifyInstance) {
       // Call Auth Service to delete from auth DB
       try {
         const authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://auth-service:4000';
-        const serviceSecret = process.env.SERVICE_SECRET || 'your-service-secret';
+        const serviceSecret = process.env.SERVICE_SECRET;
+
+        if (!serviceSecret) {
+          fastify.log.error('SERVICE_SECRET environment variable is required');
+          return reply.code(500).send({ error: 'Server configuration error' });
+        }
         
         // Direct service-to-service call (no /api/auth prefix)
         const deleteUrl = `${authServiceUrl}/internal/users/${userId}`;

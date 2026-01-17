@@ -2,8 +2,11 @@ import fp from 'fastify-plugin';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
-const SERVICE_JWT_SECRET = process.env.SERVICE_JWT_SECRET || 'default_internal_service_secret';
+const JWT_SECRET = process.env.JWT_SECRET;
+const SERVICE_JWT_SECRET = process.env.SERVICE_JWT_SECRET;
+
+if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
+if (!SERVICE_JWT_SECRET) throw new Error('SERVICE_JWT_SECRET environment variable is required');
 
 export interface AuthUser {
   userId: number;

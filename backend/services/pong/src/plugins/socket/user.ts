@@ -4,7 +4,9 @@ import jwt from "jsonwebtoken";
 import type { AuthUser as TokenUser } from "../../../shared/plugins/auth";
 import type { SocketUser } from "./types";
 
-const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
 
 export function decodeUserToken(
   fastify: FastifyInstance,
