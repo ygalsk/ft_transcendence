@@ -18,6 +18,22 @@ const MIME_TO_EXT = { 'image/jpeg': 'jpg', 'image/png': 'png'};
 
 export default async function userRoutes(fastify: FastifyInstance) {
 
+  //for user profile
+  fastify.get('/me', {
+    preHandler: [fastify.authenticate]
+  }, async (request, reply) => {
+    const userId = request.user!.userId;
+
+    const user = fastify.db.prepare(`
+      SELECT id, email, display_name, online, last_seen, avatar_url, bio, wins, losses
+      FROM users WHERE id = ?
+    `).get(userId);
+
+    if (!user)
+        return reply.code(404).send({ error: 'User not found' });
+    return reply.send({ user });
+  });
+
   // GET /:id - Get user by ID
   fastify.get('/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
