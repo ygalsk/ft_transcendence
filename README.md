@@ -343,10 +343,10 @@ CREATE TABLE tournaments (
   created_by INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
   max_players INTEGER NOT NULL,
-  is_public INTEGER NOT NULL DEFAULT 1,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   started_at TEXT,
-  finished_at TEXT
+  finished_at TEXT,
+  winner_id INTEGER
 );
 
 CREATE TABLE tournament_players (

@@ -26,7 +26,6 @@ CREATE TABLE IF NOT EXISTS tournaments (
   created_by INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',    -- pending, running, finished, cancelled
   max_players INTEGER NOT NULL,
-  is_public INTEGER NOT NULL DEFAULT 1,       -- 1 = public, 0 = private
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   started_at TEXT,
   finished_at TEXT,

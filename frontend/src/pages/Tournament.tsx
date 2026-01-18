@@ -93,7 +93,7 @@ export default function Tournament() {
         method: 'POST',
         credentials: 'include',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ name, max_players: maxPlayers, is_public: true }),
+        body: JSON.stringify({ name, max_players: maxPlayers}),
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
