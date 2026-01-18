@@ -38,7 +38,6 @@ export default function Tournament() {
   const [items, setItems] = useState<TournamentItem[]>([]);
   const [selected, setSelected] = useState<TournamentItem | null>(null);
   const [status, setStatus] = useState<string>('');
-  const [bracket, setBracket] = useState<any | null>(null);
   const [leaderboard, setLeaderboard] = useState<any | null>(null);
   const [authed, setAuthed] = useState<boolean>(true);
   const pollRef = useRef<number | null>(null);
@@ -100,95 +99,78 @@ export default function Tournament() {
     }
   };
 
-  const joinTournament = async (id: number) => {
-    const alias = window.prompt('Enter your alias for this tournament:');
-    if (!alias) return;
-    setStatus(`Joining #${id}…`);
-    try {
-      const r = await fetch(`${API_BASE}/api/pong/tournaments/join`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ tournamentId: id, alias }),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        setStatus(data?.error || data?.message || 'Join failed');
-        return;
-      }
-      setStatus('Joined.');
-      loadTournaments('open');
-      // Refresh selection panel if open
-      if (selected && selected.id === id) {
-        viewLeaderboardFor(id);
-      }
-    } catch (e: any) {
-      setStatus(`Error: ${e.message}`);
-    }
-  };
-
-  const viewBracketFor = async (id: number) => {
-    setStatus('Loading bracket…');
-    try {
-      const r = await fetch(`${API_BASE}/api/pong/tournaments/${id}/bracket`, {
-        credentials: 'include',
-        headers: authHeaders(),
-      });
-      const data = await r.json();
-      setBracket(data);
-      setStatus('Bracket loaded.');
-    } catch (e: any) {
-      setStatus(`Error: ${e.message}`);
-    }
-  };
-
-  const viewLeaderboardFor = async (id: number) => {
-    setStatus('Loading leaderboard…');
-    try {
-      const r = await fetch(`${API_BASE}/api/pong/tournaments/${id}/leaderboard`, {
-        credentials: 'include',
-        headers: authHeaders(),
-      });
-      const data = await r.json();
-      setLeaderboard(data);
-      setStatus('Leaderboard loaded.');
-    } catch (e: any) {
-      setStatus(`Error: ${e.message}`);
-    }
-  };
-
-  const startTournament = async (id: number) => {
-    const t = items.find((x) => x.id === id);
-    if (!t) return;
-    if (t.status !== 'pending') {
-      setStatus('Cannot start: tournament already started or finished.');
+const joinTournament = async (id: number) => {
+  const alias = window.prompt('Enter your alias for this tournament:');
+  if (!alias) return;
+  setStatus(`Joining #${id}…`);
+  try {
+    const url = `${API_BASE}/api/pong/tournaments/join`;
+    console.debug('POST', url, { tournamentId: id, alias });
+    const r = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ tournamentId: id, alias }),
+    });
+    const text = await r.text();
+    let data: any = {};
+    try { data = JSON.parse(text); } catch {}
+    if (!r.ok) {
+      console.error('Join failed:', r.status, text);
+      setStatus(data?.error || data?.message || `Join failed (HTTP ${r.status})`);
       return;
     }
-    if ((t.player_count ?? 0) < 2) {
-      setStatus('Need at least 2 players to start.');
+    setStatus('Joined.');
+    await loadTournaments('open');
+    if (selected?.id === id) {
+      viewLeaderboardFor(id);
+    }
+  } catch (e: any) {
+    setStatus(`Error: ${e.message}`);
+  }
+};
+
+
+const viewLeaderboardFor = async (id: number) => {
+  setStatus('Loading leaderboard…');
+  try {
+    const url = `${API_BASE}/api/pong/tournaments/${id}/leaderboard`;
+    console.debug('GET', url);
+    const r = await fetch(url, {
+      credentials: 'include',
+      headers: authHeaders(),
+    });
+    const data = await r.json();
+    setLeaderboard(data);
+    setStatus('Leaderboard loaded.');
+  } catch (e: any) {
+    setStatus(`Error: ${e.message}`);
+  }
+};
+
+const startTournament = async (id: number) => {
+  setStatus('Starting tournament…');
+  try {
+    const url = `${API_BASE}/api/pong/tournaments/${id}/start`;
+    console.debug('POST', url);
+    const r = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({}),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      setStatus(data?.error || data?.message || 'Start failed');
       return;
     }
-    setStatus('Starting tournament…');
-    try {
-      const r = await fetch(`${API_BASE}/api/pong/tournaments/${id}/start`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({}),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        setStatus(data?.error || data?.message || 'Start failed');
-        return;
-      }
-      setStatus('Tournament started.');
-      await loadTournaments('open');
-      await viewBracketFor(id);
-      scheduleNextMatchPoll(3000);
-    } catch (e: any) {
-      setStatus(`Error: ${e.message}`);
-    }
-  };
+    setStatus('Tournament started.');
+    await loadTournaments('open');
+    scheduleNextMatchPoll(3000);
+  } catch (e: any) {
+    setStatus(`Error: ${e.message}`);
+  }
+};
 
   const cancelNextMatchPoll = () => {
     if (pollRef.current !== null) {
@@ -203,50 +185,46 @@ export default function Tournament() {
     }, delayMs);
   };
 
-  const goToMatch = async (id: number) => {
-    setStatus('Checking next match…');
-    try {
-      const userId = decodeUserId();
-      const r = await fetch(
-        `${API_BASE}/api/pong/tournaments/${id}/next-match${userId ? `?userId=${userId}` : ''}`,
-        { credentials: 'include', headers: authHeaders() }
-      );
-      const data = await r.json();
-
-      if (data.status === 'waiting') {
-        setStatus('No match yet. Waiting for bracket to advance…');
-        scheduleNextMatchPoll(3000);
-        return;
-      }
-      if (data.status === 'ready' || data.status === 'running') {
-        cancelNextMatchPoll();
-        const qs = new URLSearchParams({
-          matchId: String(data.matchKey),
-          tId: String(data.tournamentId),
-          mId: String(data.tournamentMatchId),
-          alias: String(data.yourAlias || ''),
-          opponent: String(data.opponentAlias || ''),
-        }).toString();
-        navigate(`/game/ranked?${qs}`);
-        return;
-      }
-      setStatus(`Status: ${data.status}`);
-      scheduleNextMatchPoll(5000);
-    } catch (e: any) {
-      setStatus(`Error: ${e.message}`);
-      scheduleNextMatchPoll(5000);
+const goToMatch = async (id: number) => {
+  setStatus('Checking next match…');
+  try {
+    const userId = decodeUserId();
+    const url = `${API_BASE}/api/pong/tournaments/${id}/next-match` + (userId ? `?userId=${userId}` : '');
+    console.debug('GET', url);
+    const r = await fetch(url, { credentials: 'include', headers: authHeaders() });
+    const data = await r.json();
+    if (data.status === 'waiting') {
+      setStatus('No match yet. Waiting…');
+      scheduleNextMatchPoll(3000);
+      return;
     }
-  };
+    if (data.status === 'ready' || data.status === 'running') {
+      cancelNextMatchPoll();
+      const qs = new URLSearchParams({
+        matchId: String(data.matchKey ?? ''),
+        tId: String(data.tournamentId ?? id),
+        mId: String(data.tournamentMatchId ?? ''),
+        alias: String(data.yourAlias ?? ''),
+        opponent: String(data.opponentAlias ?? ''),
+      }).toString();
+      navigate(`/game/ranked?${qs}`);
+      return;
+    }
+    setStatus(`Status: ${data.status ?? 'unknown'}`);
+    scheduleNextMatchPoll(5000);
+  } catch (e: any) {
+    setStatus(`Error: ${e.message}`);
+    scheduleNextMatchPoll(5000);
+  }
+};
 
   // Auto-load details when a row is selected
   useEffect(() => {
     if (!selected) {
-      setBracket(null);
       setLeaderboard(null);
       cancelNextMatchPoll();
       return;
     }
-    viewBracketFor(selected.id);
     viewLeaderboardFor(selected.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
@@ -266,212 +244,200 @@ export default function Tournament() {
   };
 
   return (
-    <section className="tournament-container" style={{ padding: 16 }}>
-      <header className="tournament-header" style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
-        <h1 style={{ margin: 0 }}>Tournaments</h1>
-        <div className="actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="btn btn--primary" onClick={() => loadTournaments('open', search)}>
-            Open
-          </button>
-          <button className="btn btn--ghost" onClick={() => loadTournaments('finished', search)}>
-            Finished
-          </button>
-          <input
-            type="search"
-            placeholder="Search name…"
-            value={search}
-            onChange={(e) => {
-              const v = e.target.value;
-              setSearch(v);
-              loadTournaments(filter, v);
-            }}
-          />
-        </div>
-      </header>
+    <section className="tournament-container" style={{ padding: 32 }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <header
+          className="tournament-header"
+          style={{ display: 'flex', gap: 16, alignItems: 'center', justifyContent: 'space-between' }}
+        >
+          <h1 style={{ margin: 0 }}>Tournaments</h1>
+          <div className="actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button className="btn btn--primary" onClick={() => loadTournaments('open', search)}>
+              Open
+            </button>
+            <button className="btn btn--ghost" onClick={() => loadTournaments('finished', search)}>
+              Finished
+            </button>
+            <input
+              type="search"
+              placeholder="Search name…"
+              value={search}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSearch(v);
+                loadTournaments(filter, v);
+              }}
+            />
+          </div>
+        </header>
 
-      {!authed && (
-        <p style={{ color: '#eab308' }}>
-          Login required. Please sign in to view and manage tournaments.
-        </p>
-      )}
+        {!authed && (
+          <p style={{ color: '#eab308', marginTop: 8 }}>
+            Login required. Please sign in to view and manage tournaments.
+          </p>
+        )}
 
-      <p className="tournament-status" style={{ opacity: 0.85 }}>{status}</p>
+        <p className="tournament-status" style={{ opacity: 0.85, marginTop: 8 }}>{status}</p>
 
-      {/* Create form */}
-      <section className="create-panel" style={{ marginTop: 12 }}>
-        <h2 style={{ margin: '8px 0' }}>Create tournament</h2>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <input
-            type="text"
-            placeholder="Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <input
-            type="number"
-            min={2}
-            max={64}
-            value={maxPlayers}
-            onChange={(e) => setMaxPlayers(Number(e.target.value))}
-          />
-          <button className="btn btn--primary" onClick={createTournament} disabled={!authed}>
-            Create
-          </button>
-        </div>
-      </section>
+        {/* Two-column layout: table left, details right */}
+        <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', marginTop: 16 }}>
+          {/* Left: list/table */}
+          <div style={{ flex: 1, minWidth: 520 }}>
+            {/* Create form */}
+            <section className="create-panel" style={{ marginTop: 12, marginBottom: 12 }}>
+              <h2 style={{ margin: '8px 0' }}>Create tournament</h2>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  placeholder="Name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+                <input
+                  type="number"
+                  min={2}
+                  max={64}
+                  value={maxPlayers}
+                  onChange={(e) => setMaxPlayers(Number(e.target.value))}
+                />
+                <button className="btn btn--primary" onClick={createTournament} disabled={!authed}>
+                  Create
+                </button>
+              </div>
+            </section>
 
-      {/* List with expandable details row */}
-      <table className="tournament-table" style={{ width: '100%', marginTop: 16, borderCollapse: 'separate', borderSpacing: 0 }}>
-        <thead>
-          <tr>
-            <th>Name</th>
-            {filter === 'finished' ? <th>Finished</th> : <th>Status</th>}
-            {filter === 'finished' ? <th>Winners</th> : <th>Players</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {items.length === 0 ? (
-            <tr><td colSpan={3}>No tournaments</td></tr>
-          ) : items.map((t) => {
-            const canJoin = filter === 'open' && t.status === 'pending' && (t.player_count ?? 0) < (t.max_players ?? 0);
-            const winners =
-              t.podium
-                ? [
-                    t.podium.winner ? `🥇 ${t.podium.winner}` : null,
-                    t.podium.runner_up ? `🥈 ${t.podium.runner_up}` : null,
-                    t.podium.third ? `🥉 ${t.podium.third}` : null,
-                  ].filter(Boolean).join(' • ')
-                : '-';
-            const isSelected = selected?.id === t.id;
-
-            return (
-              <>
-                <tr
-                  key={`row-${t.id}`}
-                  onClick={() => toggleSelect(t)}
-                  style={{ cursor: 'pointer', background: isSelected ? 'rgba(255,255,255,0.04)' : undefined }}
-                >
-                  <td>{t.name}</td>
-                  {filter === 'finished' ? (
-                    <>
-                      <td>{t.finished_at ? new Date(t.finished_at).toLocaleString() : '-'}</td>
-                      <td>{winners}</td>
-                    </>
-                  ) : (
-                    <>
-                      <td>{t.status}</td>
-                      <td>{t.player_count}/{t.max_players}</td>
-                    </>
-                  )}
-                </tr>
-
-                {isSelected && (
-                  <tr key={`details-${t.id}`} className="details-row">
-                    <td colSpan={3} style={{ padding: 12, background: 'rgba(255,255,255,0.02)', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                        {/* Actions */}
-                        <div style={{ minWidth: 260 }}>
-                          <h3 style={{ margin: '4px 0 8px' }}>Actions</h3>
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            <button
-                              className="btn btn--primary"
-                              onClick={() => goToMatch(t.id)}
-                              disabled={t.status === 'finished' || !authed}
-                              title="Go to your next match when ready"
-                            >
-                              Go to match
-                            </button>
-                            <button
-                              className="btn"
-                              onClick={() => viewBracketFor(t.id)}
-                              disabled={!authed}
-                            >
-                              Refresh bracket
-                            </button>
-                            <button
-                              className="btn"
-                              onClick={() => viewLeaderboardFor(t.id)}
-                              disabled={!authed}
-                            >
-                              Refresh leaderboard
-                            </button>
-                            <button
-                              className="btn btn--ghost"
-                              onClick={() => startTournament(t.id)}
-                              disabled={
-                                !authed ||
-                                t.status !== 'pending' ||
-                                (t.player_count ?? 0) < 2
-                              }
-                              title="Start when enough players joined (only pending)"
-                            >
-                              Start tournament
-                            </button>
-                            <button
-                              className="btn"
-                              onClick={() => joinTournament(t.id)}
-                              disabled={!canJoin || !authed}
-                              title={canJoin ? 'Join this tournament' : 'Join disabled'}
-                            >
-                              Join
-                            </button>
-                          </div>
-                          <p style={{ opacity: 0.75, marginTop: 8 }}>
-                            Status: {t.status} • Players: {t.player_count}/{t.max_players}
-                          </p>
-                        </div>
-
-                        {/* Leaderboard */}
-                        <div style={{ flex: 1, minWidth: 280 }}>
-                          <h3 style={{ margin: '4px 0 8px' }}>Leaderboard</h3>
-                          {leaderboard?.leaderboard?.length ? (
-                            <ol style={{ margin: 0, paddingLeft: 18 }}>
-                              {leaderboard.leaderboard.map((row: any, idx: number) => (
-                                <li key={idx}>
-                                  {row.alias ?? row.name ?? 'Unknown'} — {row.points ?? row.wins ?? 0}
-                                </li>
-                              ))}
-                            </ol>
-                          ) : (
-                            <div style={{ opacity: 0.75 }}>No leaderboard yet.</div>
-                          )}
-                        </div>
-
-                        {/* Bracket preview */}
-                        <div style={{ flex: 1, minWidth: 280 }}>
-                          <h3 style={{ margin: '4px 0 8px' }}>Bracket</h3>
-                          {bracket?.rounds?.length ? (
-                            <div style={{ display: 'flex', gap: 12, overflowX: 'auto' }}>
-                              {bracket.rounds.map((round: any, ri: number) => (
-                                <div key={ri} style={{ minWidth: 160 }}>
-                                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Round {round.round}</div>
-                                  {(round.matches || []).map((m: any, mi: number) => {
-                                    const score = m.score ? `${m.score.left}-${m.score.right}` : '';
-                                    return (
-                                      <div key={mi} style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: 8, marginBottom: 8 }}>
-                                        <div style={{ fontSize: 11, opacity: 0.7 }}>#{m.index} • {m.status}</div>
-                                        <div style={{ fontSize: 12 }}>{m.left?.alias || 'BYE'}</div>
-                                        <div style={{ fontSize: 12 }}>{m.right?.alias || 'BYE'}</div>
-                                        {score && <div style={{ fontSize: 11, color: '#86efac', marginTop: 4 }}>Score: {score}</div>}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div style={{ opacity: 0.75 }}>No bracket yet.</div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
+            <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 8, padding: 12 }}>
+              <table className="tournament-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left', padding: '8px 10px' }}>Name</th>
+                    {filter === 'finished'
+                      ? <th style={{ textAlign: 'left', padding: '8px 10px' }}>Finished</th>
+                      : <th style={{ textAlign: 'left', padding: '8px 10px' }}>Status</th>}
+                    {filter === 'finished'
+                      ? <th style={{ textAlign: 'left', padding: '8px 10px' }}>Winners</th>
+                      : <th style={{ textAlign: 'left', padding: '8px 10px' }}>Players</th>}
                   </tr>
+                </thead>
+                <tbody>
+                  {items.length === 0 ? (
+                    <tr><td colSpan={3} style={{ padding: '10px' }}>No tournaments</td></tr>
+                  ) : items.map((t) => {
+                    const winners =
+                      t.podium
+                        ? [
+                            t.podium.winner ? `🥇 ${t.podium.winner}` : null,
+                            t.podium.runner_up ? `🥈 ${t.podium.runner_up}` : null,
+                            t.podium.third ? `🥉 ${t.podium.third}` : null,
+                          ].filter(Boolean).join(' • ')
+                        : '-';
+                    const isSelected = selected?.id === t.id;
+
+                    return (
+                      <tr
+                        key={t.id}
+                        onClick={() => toggleSelect(t)}
+                        style={{
+                          cursor: 'pointer',
+                          background: isSelected ? 'rgba(255,255,255,0.06)' : undefined
+                        }}
+                      >
+                        <td style={{ padding: '8px 10px' }}>{t.name}</td>
+                        {filter === 'finished' ? (
+                          <>
+                            <td style={{ padding: '8px 10px' }}>{t.finished_at ? new Date(t.finished_at).toLocaleString() : '-'}</td>
+                            <td style={{ padding: '8px 10px' }}>{winners}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td style={{ padding: '8px 10px' }}>{t.status}</td>
+                            <td style={{ padding: '8px 10px' }}>{t.player_count}/{t.max_players}</td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Right: details panel (keeps list visible) */}
+          <aside style={{ width: 380 }}>
+            <div style={{ position: 'sticky', top: 16 }}>
+              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: 12 }}>
+                <h3 style={{ margin: '4px 0 8px' }}>{selected ? selected.name : 'Details'}</h3>
+
+                {!selected ? (
+                  <div style={{ opacity: 0.75 }}>Select a tournament to see actions and leaderboard.</div>
+                ) : (
+                  <>
+                    {/* Actions */}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                      <button
+                        className="btn btn--primary"
+                        onClick={() => goToMatch(selected.id)}
+                        disabled={selected.status === 'finished' || !authed}
+                        title="Go to your next match when ready"
+                      >
+                        Go to match
+                      </button>
+                      <button
+                        className="btn btn--ghost"
+                        onClick={() => startTournament(selected.id)}
+                        disabled={
+                          !authed ||
+                          selected.status !== 'pending' ||
+                          (selected.player_count ?? 0) < 2
+                        }
+                        title="Start when enough players joined (only pending)"
+                      >
+                        Start
+                      </button>
+                      <button
+                        className="btn"
+                        onClick={() => joinTournament(selected.id)}
+                        disabled={
+                          !authed ||
+                          !(filter === 'open' && selected.status === 'pending' &&
+                            (selected.player_count ?? 0) < (selected.max_players ?? 0))
+                        }
+                      >
+                        Join
+                      </button>
+                      <button
+                        className="btn"
+                        onClick={() => viewLeaderboardFor(selected.id)}
+                        disabled={!authed}
+                        title="Refresh leaderboard"
+                      >
+                        Refresh leaderboard
+                      </button>
+                    </div>
+                    <p style={{ opacity: 0.75, marginBottom: 12 }}>
+                      Status: {selected.status} • Players: {selected.player_count}/{selected.max_players}
+                    </p>
+
+                    {/* Leaderboard only (bracket removed) */}
+                    <h4 style={{ margin: '4px 0 8px' }}>Leaderboard</h4>
+                    {leaderboard?.leaderboard?.length ? (
+                      <ol style={{ margin: 0, paddingLeft: 18 }}>
+                        {leaderboard.leaderboard.map((row: any, idx: number) => (
+                          <li key={idx}>
+                            {row.alias ?? row.name ?? 'Unknown'} — {row.points ?? row.wins ?? 0}
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <div style={{ opacity: 0.75 }}>No leaderboard yet.</div>
+                    )}
+                  </>
                 )}
-              </>
-            );
-          })}
-        </tbody>
-      </table>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
     </section>
   );
 }
