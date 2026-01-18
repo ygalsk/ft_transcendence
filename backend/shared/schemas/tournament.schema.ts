@@ -7,7 +7,6 @@ import { Type, Static } from "@sinclair/typebox";
 export const CreateTournamentSchema = Type.Object({
   name: Type.String({ minLength: 1, maxLength: 50 }),
   max_players: Type.Integer({ minimum: 2, maximum: 128 }),
-  is_public: Type.Optional(Type.Boolean()),
 });
 
 export type CreateTournamentType = Static<typeof CreateTournamentSchema>;

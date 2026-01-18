@@ -22,7 +22,7 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
       preHandler: [fastify.authenticate],
     }, async (request, reply) => {
       const userId  = request.user!.userId;
-      const { name, max_players, is_public = true } = request.body;
+      const { name, max_players} = request.body;
 
       const conflict = fastify.db
         .prepare(`SELECT id FROM tournaments WHERE name = ? AND status IN ('pending', 'running')`)
@@ -32,8 +32,8 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
         return reply.code(400).send({ error: "Tournament name already in use" });
 
       const result = fastify.db
-        .prepare(`INSERT INTO tournaments (name, created_by, max_players, is_public) VALUES (?, ?, ?, ?)`)
-        .run(name, userId, max_players, is_public ? 1 : 0);
+        .prepare(`INSERT INTO tournaments (name, created_by, max_players) VALUES (?, ?, ?)`)
+        .run(name, userId, max_players);
 
       return reply.code(201).send({ id: result.lastInsertRowid });
     }
