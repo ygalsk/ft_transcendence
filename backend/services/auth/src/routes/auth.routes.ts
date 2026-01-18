@@ -4,7 +4,7 @@ import axios from 'axios';
 import { authenticator } from 'otplib';
 import QRCode from 'qrcode';
 import { RegisterSchema, LoginSchema, TwoFAVerifySchema, RegisterType, LoginType, TwoFAVerifyType } from '../../shared/schemas/auth.schema';
-import { generateToken, generateServiceToken } from '../../shared/plugins/auth'; // Import generateServiceToken
+import { generateToken, generateServiceToken } from '../../shared/plugins/auth';
 
 interface AuthUser {
   id: number;
