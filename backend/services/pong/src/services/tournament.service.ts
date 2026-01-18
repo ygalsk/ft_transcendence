@@ -110,7 +110,7 @@ export class TournamentService {
   }
 
   // Mark tournament finished if no pending/running matches remain
-  private checkTournamentCompletion(tournamentId: number): void {
+  public checkTournamentCompletion(tournamentId: number): void {
     const remaining = this.db
       .prepare(
         `SELECT COUNT(*) AS count
@@ -120,13 +120,24 @@ export class TournamentService {
       .get(tournamentId) as any;
 
     if (remaining.count === 0) {
+      const finalMatch = this.db
+        .prepare(
+          `SELECT winner_id FROM tournament_matches
+          WHERE tournament_id = ? AND status = 'finished'
+          ORDER BY round DESC, match_index ASC
+          LIMIT 1`
+      )
+      .get(tournamentId) as any;
+
+      const winnerId = finalMatch?.winner_id;
+  
       this.db
         .prepare(
           `UPDATE tournaments
-           SET status = 'finished', finished_at = CURRENT_TIMESTAMP
+           SET status = 'finished', finished_at = CURRENT_TIMESTAMP, winner_id = ?
            WHERE id = ?`
         )
-        .run(tournamentId);
+        .run(winnerId, tournamentId);
     }
   }
 }
