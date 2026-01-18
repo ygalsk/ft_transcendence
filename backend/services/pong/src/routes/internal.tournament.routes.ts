@@ -1,9 +1,11 @@
 import { FastifyInstance } from 'fastify';
 import { TournamentMatchCompleteSchema, TournamentMatchCompleteType } from '../../shared/schemas/tournament.schema';
 import { BracketService } from '../services/bracket.service';
+import { TournamentService } from '../services/tournament.service';
 
 export default async function internalTournamentRoutes(fastify: FastifyInstance) {
   const bracketService = new BracketService(fastify.db);
+  const tournamentService = new TournamentService(fastify.db, bracketService);
 
   // Serialize match-complete processing
   let matchQueue = Promise.resolve();
@@ -86,28 +88,11 @@ export default async function internalTournamentRoutes(fastify: FastifyInstance)
             );
 
             // Advance any bye matches (players with no opponent)
-            // Note: resolveStalledMatches removed - was causing instant auto-resolution
             // Matches should only timeout after reasonable period (default 120s)
             bracketService.advanceByes(tournamentId, maxRound);
 
-            // Check completion - only pending/running matches
-            const remaining = fastify.db
-              .prepare(
-                `SELECT COUNT(*) AS count
-                 FROM tournament_matches
-                 WHERE tournament_id = ? AND status IN ('pending','running')`
-              )
-              .get(tournamentId) as any;
-
-            if (remaining.count === 0) {
-              fastify.db
-                .prepare(
-                  `UPDATE tournaments
-                   SET status = 'finished', finished_at = CURRENT_TIMESTAMP
-                   WHERE id = ?`
-                )
-                .run(tournamentId);
-            }
+            // Check if tournament is complete
+            tournamentService.checkTournamentCompletion(tournamentId);
           });
 
           tx();

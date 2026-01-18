@@ -17,7 +17,7 @@ CREATE INDEX IF NOT EXISTS idx_matches_loser ON matches(loser_id);
 CREATE INDEX IF NOT EXISTS idx_matches_created ON matches(created_at);
 
 -- ==========================
--- Tournaments (from User Service)
+-- Tournaments 
 -- ==========================
 
 CREATE TABLE IF NOT EXISTS tournaments (
@@ -29,14 +29,15 @@ CREATE TABLE IF NOT EXISTS tournaments (
   is_public INTEGER NOT NULL DEFAULT 1,       -- 1 = public, 0 = private
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   started_at TEXT,
-  finished_at TEXT
+  finished_at TEXT,
+  winner_id INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_tournament_status ON tournaments(status);
 CREATE INDEX IF NOT EXISTS idx_tournament_created_by ON tournaments(created_by);
 
 -- ==========================
--- Tournament Players (from User Service)
+-- Tournament Players 
 -- ==========================
 
 CREATE TABLE IF NOT EXISTS tournament_players (
@@ -53,7 +54,7 @@ CREATE INDEX IF NOT EXISTS idx_tournament_players_tournament ON tournament_playe
 CREATE INDEX IF NOT EXISTS idx_tournament_players_user ON tournament_players(user_id);
 
 -- ==========================
--- Tournament Matches (from User Service)
+-- Tournament Matches 
 -- ==========================
 
 CREATE TABLE IF NOT EXISTS tournament_matches (
