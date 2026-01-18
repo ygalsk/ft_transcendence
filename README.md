@@ -56,7 +56,7 @@ Our team followed an Agile/Scrum methodology with clearly defined roles:
 ## 📋 Project Management
 
 ### Methodology
-We adopted **Agile/Scrum** with 2-3 day sprints: 
+We adopted **Agile/Scrum** with 1-2 week(s) sprints: 
 
 - **Daily Standups**: Quick sync meetings every few days
 - **Sprint Planning**: Clear task breakdown with time estimates
@@ -135,7 +135,7 @@ We chose a **microservices architecture** to:
 
 ### Tournament System
 - **Bracket Generation**:  Automatic single-elimination tournament brackets
-- **Public/Private Tournaments**: Host open tournaments
+- **Public Tournaments**: Host open tournaments
 - **Real-time Updates**: Live bracket updates as matches complete
 - **Tournament History**: View past tournament results and standings
 
@@ -533,7 +533,7 @@ This will:
 ### Playing Pong
 
 #### Quick Match
-1. Log in to your account
+1. Log in to your account or play as guest
 2. Click "Play Now"
 3. Wait for matchmaking or invite a friend
 4. Use **W/S** or **Arrow Keys** to move your paddle
@@ -667,11 +667,9 @@ This will:
 ### Browser Compatibility
 
 Tested on:
-- ✅ Chrome 120+
-- ✅ Firefox 121+
-- ✅ Safari 17+
-- ✅ Edge 120+
-
+- ✅ Chrome
+- ✅ Firefox
+  
 ---
 
 ## 🐛 Troubleshooting
