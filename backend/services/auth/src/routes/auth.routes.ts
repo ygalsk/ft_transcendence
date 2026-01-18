@@ -110,6 +110,9 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
   // POST /2fa/setup
   fastify.post('/2fa/setup', {
+    schema: {
+      security: [{ bearerAuth: [] }]
+    },
     preHandler: [fastify.authenticate]
   }, async (request, reply) => {
     const userId = request.user!.userId;
@@ -133,7 +136,10 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
   // POST /2fa/verify
   fastify.post<{ Body: TwoFAVerifyType }>('/2fa/verify', {
-    schema: { body: TwoFAVerifySchema },
+    schema: {
+      body: TwoFAVerifySchema,
+      security: [{ bearerAuth: [] }]
+    },
     preHandler: [fastify.authenticate]
   }, async (request, reply) => {
     const userId = request.user!.userId;
@@ -159,6 +165,9 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
   // GET /me
   fastify.get('/me', {
+    schema: {
+      security: [{ bearerAuth: [] }]
+    },
     preHandler: [fastify.authenticate]
   }, async (request, reply) => {
     const userId = request.user!.userId;

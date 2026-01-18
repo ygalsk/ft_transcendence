@@ -1,0 +1,77 @@
+# ============================================
+# PRODUCTION CONFIGURATION (DISABLED LOCALLY)
+# ============================================
+
+https://transcendence.keystone-gateway.dev {
+   header {
+       Access-Control-Allow-Origin "*"
+       Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+       Access-Control-Allow-Headers "Content-Type, Authorization"
+       Access-Control-Allow-Credentials "true"
+   }
+   handle /dashboard* {
+       reverse_proxy grafana:3000
+   }
+   handle /api/auth/* {
+       uri strip_prefix /api/auth
+       reverse_proxy auth-service:4000
+   }
+   handle /api/user/* {
+       uri strip_prefix /api/user
+       reverse_proxy user-service:5000
+   }
+   handle /api/pong/* {
+       uri strip_prefix /api/pong
+       reverse_proxy pong-service:6061
+   }
+   handle /socket.io/* {
+       reverse_proxy pong-service:6061 {
+           header_up Upgrade {http.request.header.Upgrade}
+           header_up Connection {http.request.header.Connection}
+       }
+   }
+   handle {
+       root * /srv/frontend
+       encode gzip
+       try_files {path} /index.html
+       file_server
+   }
+}
+
+# ============================================
+# HTTPS on localhost (for dev)
+# ============================================
+
+# https://localhost {
+#     tls internal
+#     header {
+#         Access-Control-Allow-Origin "*"
+#         Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+#         Access-Control-Allow-Headers "Content-Type, Authorization"
+#         Access-Control-Allow-Credentials "true"
+#     }
+#     handle /api/auth/* {
+#         uri strip_prefix /api/auth
+#         reverse_proxy auth-service:4000
+#     }
+#     handle /api/user/* {
+#         uri strip_prefix /api/user
+#         reverse_proxy user-service:5000
+#     }
+#     handle /api/pong/* {
+#         uri strip_prefix /api/pong
+#         reverse_proxy pong-service:6061
+#     }
+#     handle /socket.io/* {
+#         reverse_proxy pong-service:6061 {
+#             header_up Upgrade {http.request.header.Upgrade}
+#             header_up Connection {http.request.header.Connection}
+#         }
+#     }
+#     handle {
+#         root * /srv/frontend
+#         encode gzip
+#         try_files {path} /index.html
+#         file_server
+#     }
+# }
