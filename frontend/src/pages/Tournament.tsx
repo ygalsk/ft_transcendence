@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState} from 'react';
 import { useNavigate } from 'react-router-dom';
+// import AuthContext from '../context/AuthContext';
 
 type TournamentItem = {
   id: number;
@@ -46,6 +47,15 @@ export default function Tournament() {
   const [name, setName] = useState('');
   const [maxPlayers, setMaxPlayers] = useState<number>(8);
   const [search, setSearch] = useState<string>('');
+
+//   const auth = useContext(AuthContext) as any;
+//   const user = auth?.user;
+// //   const aliasFromUser =
+// //     user?.display_name ??
+// //     (user as any)?.user?.display_name ??
+// //     (user as any)?.data?.display_name ??
+// //     null;
+
 
   const loadTournaments = async (f = filter, q = '') => {
     setFilter(f);
@@ -100,17 +110,15 @@ export default function Tournament() {
   };
 
 const joinTournament = async (id: number) => {
-  const alias = window.prompt('Enter your alias for this tournament:');
-  if (!alias) return;
   setStatus(`Joining #${id}…`);
   try {
     const url = `${API_BASE}/api/pong/tournaments/join`;
-    console.debug('POST', url, { tournamentId: id, alias });
+    console.debug('POST', url, { tournamentId: id });
     const r = await fetch(url, {
       method: 'POST',
       credentials: 'include',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ tournamentId: id, alias }),
+      body: JSON.stringify({ tournamentId: id }),
     });
     const text = await r.text();
     let data: any = {};
@@ -419,15 +427,62 @@ const goToMatch = async (id: number) => {
                     </p>
 
                     {/* Leaderboard only (bracket removed) */}
-                    <h4 style={{ margin: '4px 0 8px' }}>Leaderboard</h4>
+ <h4 style={{ margin: '4px 0 8px' }}>Leaderboard</h4>
                     {leaderboard?.leaderboard?.length ? (
-                      <ol style={{ margin: 0, paddingLeft: 18 }}>
-                        {leaderboard.leaderboard.map((row: any, idx: number) => (
-                          <li key={idx}>
-                            {row.alias ?? row.name ?? 'Unknown'} — {row.points ?? row.wins ?? 0}
-                          </li>
-                        ))}
-                      </ol>
+                      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
+                        {leaderboard.leaderboard.map((row: any, idx: number) => {
+                          const name = row.display_name ?? row.alias ?? row.name ?? 'Unknown';
+                          const points = row.points ?? row.wins ?? 0;
+                          const rank = idx + 1;
+                          const rankStyle = (() => {
+                            if (rank === 1) return { background: '#f59e0b22', color: '#f59e0b', border: '1px solid #f59e0b55' }; // gold
+                            if (rank === 2) return { background: '#9ca3af22', color: '#9ca3af', border: '1px solid #9ca3af55' }; // silver
+                            if (rank === 3) return { background: '#b4530922', color: '#b45309', border: '1px solid #b4530955' }; // bronze
+                            return { background: 'rgba(255,255,255,0.06)', color: 'inherit', border: '1px solid rgba(255,255,255,0.12)' };
+                          })();
+                          return (
+                            <li
+                              key={idx}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 12,
+                                padding: '10px 12px',
+                                border: '1px solid rgba(255,255,255,0.08)',
+                                borderRadius: 8,
+                                background: 'rgba(255,255,255,0.02)',
+                              }}
+                            >
+                              <span
+                                style={{
+                                  minWidth: 30,
+                                  height: 30,
+                                  borderRadius: 15,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontWeight: 700,
+                                  ...rankStyle,
+                                }}
+                                title={`Rank #${rank}`}
+                              >
+                                {rank}
+                              </span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {name}
+                                </div>
+                                {row.wins != null && (
+                                  <div style={{ opacity: 0.7, fontSize: 12 }}>
+                                    {row.wins} wins
+                                  </div>
+                                )}
+                              </div>
+                              <div style={{ fontWeight: 700 }}>{points} pts</div>
+                            </li>
+                          );
+                        })}
+                      </ul>
                     ) : (
                       <div style={{ opacity: 0.75 }}>No leaderboard yet.</div>
                     )}
