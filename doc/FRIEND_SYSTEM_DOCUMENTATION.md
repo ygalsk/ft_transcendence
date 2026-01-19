@@ -3,6 +3,22 @@
 ## Overview
 The friend system allows users to send friend requests, accept/decline them, view pending requests, and manage their friend list with online status tracking.
 
+## Quick Start
+
+**Base URL:** `/api/user/friends`
+
+**Authentication:** All endpoints require Bearer token authentication.
+
+**Common Use Cases:**
+- Send friend request: `POST /api/user/friends` with `{"friend_id": userId}`
+- Accept request: `PATCH /api/user/friends/:friendshipId` with `{"action": "accept"}`
+- Decline/Cancel/Remove: `DELETE /api/user/friends/:friendId`
+- View friends: `GET /api/user/friends`
+- View pending requests: `GET /api/user/friends/requests`
+- View online friends only: `GET /api/user/friends/online`
+
+**Note:** To decline a friend request, use the DELETE endpoint, not PATCH. The PATCH endpoint only supports "accept".
+
 ---
 
 ## API Endpoints
@@ -59,10 +75,10 @@ const sendFriendRequest = async (token, friendId) => {
 
 ---
 
-### 2. Accept/Respond to Friend Request
+### 2. Accept Friend Request
 **Endpoint:** `PATCH /friends/:friendshipId`
 
-**Description:** Accept a pending friend request. Authentication required.
+**Description:** Accept a pending friend request. Authentication required. **Note:** This endpoint only supports "accept" action. To decline a request, use the DELETE endpoint instead.
 
 **Headers:**
 ```
@@ -264,56 +280,72 @@ const getFriendsList = async (token) => {
 
 ---
 
+### 6. Get Online Friends
+**Endpoint:** `GET /friends/online`
+
+**Description:** Get only friends who are currently online. Authentication required.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200):**
+```json
+{
+  "online_friends": [
+    {
+      "id": 3,
+      "display_name": "John Doe",
+      "avatar_url": "3.png",
+      "last_seen": "2025-12-05T14:20:00Z"
+    }
+  ]
+}
+```
+
+**Use Case:** Useful for showing online friends for game invites or chat features.
+
+**Example Usage (Frontend):**
+```javascript
+const getOnlineFriends = async (token) => {
+  const response = await fetch('/api/user/friends/online', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  const data = await response.json();
+  console.log(`${data.online_friends.length} friends online`);
+};
+```
+
+---
+
 ## Frontend Integration Example
 
-### Complete React Component
+### Simple React Example
 ```javascript
 import { useState, useEffect } from 'react';
 
 export function FriendsManager({ token }) {
   const [friends, setFriends] = useState([]);
   const [incoming, setIncoming] = useState([]);
-  const [outgoing, setOutgoing] = useState([]);
-  const [loading, setLoading] = useState(true);
 
-  // Fetch friends and pending requests
   useEffect(() => {
+    // Fetch friends and pending requests
     Promise.all([
-      fetch('/api/friends', {
+      fetch('/api/user/friends', {
         headers: { 'Authorization': `Bearer ${token}` }
       }).then(r => r.json()),
-      
-      fetch('/api/friends/requests', {
+      fetch('/api/user/friends/requests', {
         headers: { 'Authorization': `Bearer ${token}` }
       }).then(r => r.json())
     ]).then(([friendsData, requestsData]) => {
       setFriends(friendsData.friends);
       setIncoming(requestsData.incoming);
-      setOutgoing(requestsData.outgoing);
-      setLoading(false);
     });
   }, [token]);
 
-  // Send friend request
-  const handleAddFriend = async (userId) => {
-    const response = await fetch('/api/friends', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ friend_id: userId })
-    });
-    
-    if (response.status === 201) {
-      alert('Friend request sent!');
-      // Refresh pending requests
-    }
-  };
-
-  // Accept friend request
-  const handleAccept = async (friendshipId) => {
-    const response = await fetch(`/api/friends/${friendshipId}`, {
+  const acceptRequest = async (friendshipId) => {
+    await fetch(`/api/user/friends/${friendshipId}`, {
       method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -321,61 +353,44 @@ export function FriendsManager({ token }) {
       },
       body: JSON.stringify({ action: 'accept' })
     });
-    
-    if (response.ok) {
-      setIncoming(incoming.filter(r => r.id !== friendshipId));
-      alert('Friend request accepted!');
-    }
+    // Refresh list
   };
 
-  // Decline/Remove
-  const handleRemove = async (friendId) => {
-    const response = await fetch(`/api/friends/${friendId}`, {
+  const removeFriend = async (friendId) => {
+    await fetch(`/api/user/friends/${friendId}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` }
     });
-    
-    if (response.status === 204) {
-      setFriends(friends.filter(f => f.id !== friendId));
-      alert('Removed!');
-    }
+    // Refresh list
   };
 
-  if (loading) return <div>Loading...</div>;
-
   return (
-    <div style={{ padding: '20px' }}>
-      {/* Incoming Requests */}
-      <section>
-        <h3>Friend Requests ({incoming.length})</h3>
-        {incoming.map(req => (
-          <div key={req.id} style={{ marginBottom: '10px', border: '1px solid #ccc', padding: '10px' }}>
-            <img src={req.avatar_url} alt="" width="40" />
-            <span>{req.from_user_display_name}</span>
-            <button onClick={() => handleAccept(req.id)}>Accept</button>
-            <button onClick={() => handleRemove(req.from_user_id)}>Decline</button>
-          </div>
-        ))}
-      </section>
+    <div>
+      <h3>Friend Requests ({incoming.length})</h3>
+      {incoming.map(req => (
+        <div key={req.id}>
+          <img src={`/api/user/${req.from_user_id}/avatar`} alt="" width="40" />
+          <span>{req.from_user_display_name}</span>
+          <button onClick={() => acceptRequest(req.id)}>Accept</button>
+          <button onClick={() => removeFriend(req.from_user_id)}>Decline</button>
+        </div>
+      ))}
 
-      {/* Friends List */}
-      <section>
-        <h3>Friends ({friends.length})</h3>
-        {friends.map(friend => (
-          <div key={friend.id} style={{ marginBottom: '10px', border: '1px solid #ddd', padding: '10px' }}>
-            <img src={friend.avatar_url} alt="" width="40" />
-            <span>{friend.display_name}</span>
-            <span style={{ color: friend.online ? 'green' : 'gray' }}>
-              {friend.online ? '🟢 Online' : '⚫ Offline'}
-            </span>
-            <button onClick={() => handleRemove(friend.id)}>Remove</button>
-          </div>
-        ))}
-      </section>
+      <h3>Friends ({friends.length})</h3>
+      {friends.map(friend => (
+        <div key={friend.id}>
+          <img src={`/api/user/${friend.id}/avatar`} alt="" width="40" />
+          <span>{friend.display_name}</span>
+          <span>{friend.online ? '🟢' : '⚫'}</span>
+          <button onClick={() => removeFriend(friend.id)}>Remove</button>
+        </div>
+      ))}
     </div>
   );
 }
 ```
+
+**Important:** Avatar URLs should be constructed as `/api/user/${userId}/avatar`, not using the `avatar_url` field directly (which is just a filename like "3.png").
 
 ---
 
