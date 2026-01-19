@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState} from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-// import AuthContext from '../context/AuthContext';
 
 type TournamentItem = {
   id: number;
@@ -48,17 +47,10 @@ export default function Tournament() {
   const [maxPlayers, setMaxPlayers] = useState<number>(8);
   const [search, setSearch] = useState<string>('');
 
-//   const auth = useContext(AuthContext) as any;
-//   const user = auth?.user;
-// //   const aliasFromUser =
-// //     user?.display_name ??
-// //     (user as any)?.user?.display_name ??
-// //     (user as any)?.data?.display_name ??
-// //     null;
-
+  // Winner map (id -> winner name) for finished tournaments
+  const [winners, setWinners] = useState<Record<number, string | null>>({});
 
   const loadTournaments = async (f = filter, q = '') => {
-    setFilter(f);
     setStatus('Loading tournaments…');
     try {
       const res = await fetch(
@@ -69,15 +61,56 @@ export default function Tournament() {
         setAuthed(res.status !== 401);
         const data = await res.json().catch(() => ({}));
         setItems([]);
+        setWinners({});
         setStatus(data?.error || data?.message || `HTTP ${res.status}`);
         return;
       }
       setAuthed(true);
       const data = await res.json();
-      const list = data.tournaments || [];
-      setItems(list);
-      setStatus(`${list.length} ${f === 'finished' ? 'finished' : 'open'} shown`);
+
+      const listRaw: TournamentItem[] = data.tournaments || [];
+      // Ensure finished view only shows truly finished tournaments
+      const filteredList =
+        f === 'finished'
+          ? listRaw.filter((t) => (t.status ?? '').toLowerCase() === 'finished')
+          : listRaw;
+
+      setItems(filteredList);
+
+      if (f === 'finished' && filteredList.length) {
+        // Only compute champions for finished tournaments from podium (not per-game leaderboard)
+        setStatus('Loading winners…');
+        try {
+          const entries = await Promise.all(
+            filteredList.map(async (t) => {
+              if (t.podium?.winner) return [t.id, t.podium.winner] as [number, string | null];
+              // Optional: try a podium endpoint if your backend provides it
+              try {
+                const r = await fetch(`${API_BASE}/api/pong/tournaments/${t.id}/podium`, {
+                  credentials: 'include',
+                  headers: authHeaders(),
+                });
+                const pd = await r.json().catch(() => ({}));
+                const champ = pd?.winner ?? pd?.podium?.winner ?? null;
+                return [t.id, champ] as [number, string | null];
+              } catch {
+                return [t.id, null] as [number, string | null];
+              }
+            })
+          );
+          setWinners(Object.fromEntries(entries));
+          setStatus(`${filteredList.length} finished shown`);
+        } catch {
+          setWinners({});
+          setStatus(`${filteredList.length} finished shown`);
+        }
+      } else {
+        setWinners({});
+        setStatus(`${filteredList.length} open shown`);
+      }
     } catch (e: any) {
+      setItems([]);
+      setWinners({});
       setStatus(`Failed: ${e.message}`);
     }
   };
@@ -109,76 +142,77 @@ export default function Tournament() {
     }
   };
 
-const joinTournament = async (id: number) => {
-  setStatus(`Joining #${id}…`);
-  try {
-    const url = `${API_BASE}/api/pong/tournaments/join`;
-    console.debug('POST', url, { tournamentId: id });
-    const r = await fetch(url, {
-      method: 'POST',
-      credentials: 'include',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ tournamentId: id }),
-    });
-    const text = await r.text();
-    let data: any = {};
-    try { data = JSON.parse(text); } catch {}
-    if (!r.ok) {
-      console.error('Join failed:', r.status, text);
-      setStatus(data?.error || data?.message || `Join failed (HTTP ${r.status})`);
-      return;
+  const joinTournament = async (id: number) => {
+    setStatus(`Joining #${id}…`);
+    try {
+      const url = `${API_BASE}/api/pong/tournaments/join`;
+      console.debug('POST', url, { tournamentId: id });
+      const r = await fetch(url, {
+        method: 'POST',
+        credentials: 'include',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ tournamentId: id }),
+      });
+      const text = await r.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {}
+      if (!r.ok) {
+        console.error('Join failed:', r.status, text);
+        setStatus(data?.error || data?.message || `Join failed (HTTP ${r.status})`);
+        return;
+      }
+      setStatus('Joined.');
+      await loadTournaments('open');
+      if (selected?.id === id) {
+        viewLeaderboardFor(id);
+      }
+    } catch (e: any) {
+      setStatus(`Error: ${e.message}`);
     }
-    setStatus('Joined.');
-    await loadTournaments('open');
-    if (selected?.id === id) {
-      viewLeaderboardFor(id);
+  };
+
+  const viewLeaderboardFor = async (id: number) => {
+    setStatus('Loading leaderboard…');
+    try {
+      const url = `${API_BASE}/api/pong/tournaments/${id}/leaderboard`;
+      console.debug('GET', url);
+      const r = await fetch(url, {
+        credentials: 'include',
+        headers: authHeaders(),
+      });
+      const data = await r.json();
+      setLeaderboard(data);
+      setStatus('Leaderboard loaded.');
+    } catch (e: any) {
+      setStatus(`Error: ${e.message}`);
     }
-  } catch (e: any) {
-    setStatus(`Error: ${e.message}`);
-  }
-};
+  };
 
-
-const viewLeaderboardFor = async (id: number) => {
-  setStatus('Loading leaderboard…');
-  try {
-    const url = `${API_BASE}/api/pong/tournaments/${id}/leaderboard`;
-    console.debug('GET', url);
-    const r = await fetch(url, {
-      credentials: 'include',
-      headers: authHeaders(),
-    });
-    const data = await r.json();
-    setLeaderboard(data);
-    setStatus('Leaderboard loaded.');
-  } catch (e: any) {
-    setStatus(`Error: ${e.message}`);
-  }
-};
-
-const startTournament = async (id: number) => {
-  setStatus('Starting tournament…');
-  try {
-    const url = `${API_BASE}/api/pong/tournaments/${id}/start`;
-    console.debug('POST', url);
-    const r = await fetch(url, {
-      method: 'POST',
-      credentials: 'include',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({}),
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      setStatus(data?.error || data?.message || 'Start failed');
-      return;
+  const startTournament = async (id: number) => {
+    setStatus('Starting tournament…');
+    try {
+      const url = `${API_BASE}/api/pong/tournaments/${id}/start`;
+      console.debug('POST', url);
+      const r = await fetch(url, {
+        method: 'POST',
+        credentials: 'include',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({}),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setStatus(data?.error || data?.message || 'Start failed');
+        return;
+      }
+      setStatus('Tournament started.');
+      await loadTournaments('open');
+      scheduleNextMatchPoll(3000);
+    } catch (e: any) {
+      setStatus(`Error: ${e.message}`);
     }
-    setStatus('Tournament started.');
-    await loadTournaments('open');
-    scheduleNextMatchPoll(3000);
-  } catch (e: any) {
-    setStatus(`Error: ${e.message}`);
-  }
-};
+  };
 
   const cancelNextMatchPoll = () => {
     if (pollRef.current !== null) {
@@ -193,38 +227,40 @@ const startTournament = async (id: number) => {
     }, delayMs);
   };
 
-const goToMatch = async (id: number) => {
-  setStatus('Checking next match…');
-  try {
-    const userId = decodeUserId();
-    const url = `${API_BASE}/api/pong/tournaments/${id}/next-match` + (userId ? `?userId=${userId}` : '');
-    console.debug('GET', url);
-    const r = await fetch(url, { credentials: 'include', headers: authHeaders() });
-    const data = await r.json();
-    if (data.status === 'waiting') {
-      setStatus('No match yet. Waiting…');
-      scheduleNextMatchPoll(3000);
-      return;
+  const goToMatch = async (id: number) => {
+    setStatus('Checking next match…');
+    try {
+      const userId = decodeUserId();
+      const url =
+        `${API_BASE}/api/pong/tournaments/${id}/next-match` +
+        (userId ? `?userId=${userId}` : '');
+      console.debug('GET', url);
+      const r = await fetch(url, { credentials: 'include', headers: authHeaders() });
+      const data = await r.json();
+      if (data.status === 'waiting') {
+        setStatus('No match yet. Waiting…');
+        scheduleNextMatchPoll(3000);
+        return;
+      }
+      if (data.status === 'ready' || data.status === 'running') {
+        cancelNextMatchPoll();
+        const qs = new URLSearchParams({
+          matchId: String(data.matchKey ?? ''),
+          tId: String(data.tournamentId ?? id),
+          mId: String(data.tournamentMatchId ?? ''),
+          alias: String(data.yourAlias ?? ''),
+          opponent: String(data.opponentAlias ?? ''),
+        }).toString();
+        navigate(`/game/ranked?${qs}`);
+        return;
+      }
+      setStatus(`Status: ${data.status ?? 'unknown'}`);
+      scheduleNextMatchPoll(5000);
+    } catch (e: any) {
+      setStatus(`Error: ${e.message}`);
+      scheduleNextMatchPoll(5000);
     }
-    if (data.status === 'ready' || data.status === 'running') {
-      cancelNextMatchPoll();
-      const qs = new URLSearchParams({
-        matchId: String(data.matchKey ?? ''),
-        tId: String(data.tournamentId ?? id),
-        mId: String(data.tournamentMatchId ?? ''),
-        alias: String(data.yourAlias ?? ''),
-        opponent: String(data.opponentAlias ?? ''),
-      }).toString();
-      navigate(`/game/ranked?${qs}`);
-      return;
-    }
-    setStatus(`Status: ${data.status ?? 'unknown'}`);
-    scheduleNextMatchPoll(5000);
-  } catch (e: any) {
-    setStatus(`Error: ${e.message}`);
-    scheduleNextMatchPoll(5000);
-  }
-};
+  };
 
   // Auto-load details when a row is selected
   useEffect(() => {
@@ -237,15 +273,17 @@ const goToMatch = async (id: number) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
 
+  // Initial load + periodic refresh that respects current filter/search
   useEffect(() => {
-    loadTournaments('open');
-    const t = setInterval(() => filter === 'open' && loadTournaments('open', search), 10000);
+    loadTournaments(filter, search);
+    const t = setInterval(() => {
+      loadTournaments(filter, search);
+    }, 10000);
     return () => {
       clearInterval(t);
       cancelNextMatchPoll();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [filter, search]);
 
   const toggleSelect = (t: TournamentItem) => {
     setSelected((cur) => (cur && cur.id === t.id ? null : t));
@@ -260,10 +298,22 @@ const goToMatch = async (id: number) => {
         >
           <h1 style={{ margin: 0 }}>Tournaments</h1>
           <div className="actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button className="btn btn--primary" onClick={() => loadTournaments('open', search)}>
+            <button
+              className="btn btn--primary"
+              onClick={() => {
+                setFilter('open');
+                loadTournaments('open', search);
+              }}
+            >
               Open
             </button>
-            <button className="btn btn--ghost" onClick={() => loadTournaments('finished', search)}>
+            <button
+              className="btn btn--ghost"
+              onClick={() => {
+                setFilter('finished');
+                loadTournaments('finished', search);
+              }}
+            >
               Finished
             </button>
             <input
@@ -323,7 +373,7 @@ const goToMatch = async (id: number) => {
                       ? <th style={{ textAlign: 'left', padding: '8px 10px' }}>Finished</th>
                       : <th style={{ textAlign: 'left', padding: '8px 10px' }}>Status</th>}
                     {filter === 'finished'
-                      ? <th style={{ textAlign: 'left', padding: '8px 10px' }}>Winners</th>
+                      ? <th style={{ textAlign: 'left', padding: '8px 10px' }}>Winner</th>
                       : <th style={{ textAlign: 'left', padding: '8px 10px' }}>Players</th>}
                   </tr>
                 </thead>
@@ -331,15 +381,9 @@ const goToMatch = async (id: number) => {
                   {items.length === 0 ? (
                     <tr><td colSpan={3} style={{ padding: '10px' }}>No tournaments</td></tr>
                   ) : items.map((t) => {
-                    const winners =
-                      t.podium
-                        ? [
-                            t.podium.winner ? `🥇 ${t.podium.winner}` : null,
-                            t.podium.runner_up ? `🥈 ${t.podium.runner_up}` : null,
-                            t.podium.third ? `🥉 ${t.podium.third}` : null,
-                          ].filter(Boolean).join(' • ')
-                        : '-';
                     const isSelected = selected?.id === t.id;
+                    const isFinished = (t.status ?? '').toLowerCase() === 'finished';
+                    const winnerName = isFinished ? (winners[t.id] ?? t.podium?.winner ?? null) : null;
 
                     return (
                       <tr
@@ -353,8 +397,12 @@ const goToMatch = async (id: number) => {
                         <td style={{ padding: '8px 10px' }}>{t.name}</td>
                         {filter === 'finished' ? (
                           <>
-                            <td style={{ padding: '8px 10px' }}>{t.finished_at ? new Date(t.finished_at).toLocaleString() : '-'}</td>
-                            <td style={{ padding: '8px 10px' }}>{winners}</td>
+                            <td style={{ padding: '8px 10px' }}>
+                              {t.finished_at ? new Date(t.finished_at).toLocaleString() : '-'}
+                            </td>
+                            <td style={{ padding: '8px 10px' }}>
+                              {winnerName ? `🥇 ${winnerName}` : '-'}
+                            </td>
                           </>
                         ) : (
                           <>
@@ -427,7 +475,7 @@ const goToMatch = async (id: number) => {
                     </p>
 
                     {/* Leaderboard only (bracket removed) */}
- <h4 style={{ margin: '4px 0 8px' }}>Leaderboard</h4>
+                    <h4 style={{ margin: '4px 0 8px' }}>Leaderboard</h4>
                     {leaderboard?.leaderboard?.length ? (
                       <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
                         {leaderboard.leaderboard.map((row: any, idx: number) => {
@@ -435,9 +483,9 @@ const goToMatch = async (id: number) => {
                           const points = row.points ?? row.wins ?? 0;
                           const rank = idx + 1;
                           const rankStyle = (() => {
-                            if (rank === 1) return { background: '#f59e0b22', color: '#f59e0b', border: '1px solid #f59e0b55' }; // gold
-                            if (rank === 2) return { background: '#9ca3af22', color: '#9ca3af', border: '1px solid #9ca3af55' }; // silver
-                            if (rank === 3) return { background: '#b4530922', color: '#b45309', border: '1px solid #b4530955' }; // bronze
+                            if (rank === 1) return { background: '#f59e0b22', color: '#f59e0b', border: '1px solid #f59e0b55' };
+                            if (rank === 2) return { background: '#9ca3af22', color: '#9ca3af', border: '1px solid #9ca3af55' };
+                            if (rank === 3) return { background: '#b4530922', color: '#b45309', border: '1px solid #b4530955' };
                             return { background: 'rgba(255,255,255,0.06)', color: 'inherit', border: '1px solid rgba(255,255,255,0.12)' };
                           })();
                           return (
