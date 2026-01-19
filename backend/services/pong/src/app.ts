@@ -34,9 +34,7 @@ export function buildApp() {
   });
 
   // Socket.IO plugin
-  app.register(socketIOPlugin, {
-    cors: { origin: '*' }
-  });
+  app.register(socketIOPlugin, {serviceName: 'pong-service'});
 
   // Pong-specific Socket.IO handlers
   app.register(pongSocketPlugin);
