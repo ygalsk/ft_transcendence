@@ -25,7 +25,7 @@ export function buildApp() {
   app.register(authPlugin);
 
   // Prometheus metrics
-  app.register(prometheusPlugin);
+  app.register(prometheusPlugin, {serviceName: 'pong-service'});
 
   // Swagger
   app.register(swaggerPlugin, {

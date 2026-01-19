@@ -33,7 +33,7 @@ export function buildApp() {
   app.register(authPlugin);
 
   // Prometheus metrics
-  app.register(prometheusPlugin);
+  app.register(prometheusPlugin, { serviceName: 'user-service'});
 
   // Swagger
   app.register(swaggerPlugin, {
