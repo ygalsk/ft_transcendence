@@ -177,7 +177,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
   });
   
   //get /:id/avatar -serve files
-  fastify.get<{ Params: GetAvatarParamsType }>('/:id/avatar', {
+  fastify.get<{ Params: GetAvatarParamsType }>('/:userId/avatar', {
     schema: {
       params: GetAvatarParamsSchema,
       response: {
