@@ -1,19 +1,8 @@
-:root {
-  color-scheme: light dark;
-  --bg-primary: radial-gradient(circle at top, #2d1b69, #0b1026 60%);
-  --card-bg: rgba(10, 14, 33, 0.85);
-  --border-color: rgba(255, 255, 255, 0.08);
-  --accent: #8d7bff;
-  --accent-strong: #c0a6ff;
-  --text-muted: rgba(255, 255, 255, 0.65);
-}
-
-body {
-  margin: 0;
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  background: var(--bg-primary);
+/* Login page specific styles */
+.page-login {
+  min-height: 100vh;
+  background: radial-gradient(circle at top, #2d1b69, #0b1026 60%);
   background-attachment: fixed;
-  color: #fff;
 }
 
 .login-container {
@@ -26,8 +15,8 @@ body {
 
 .login-card {
   width: min(420px, 100%);
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
+  background: rgba(10, 14, 33, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 24px;
   padding: 40px 36px;
   backdrop-filter: blur(18px);
@@ -36,75 +25,104 @@ body {
 }
 
 .login-title {
-  margin: 0;
+  margin: 0 0 12px;
   font-size: 1.8rem;
   font-weight: 600;
   text-align: center;
+  color: #fff;
 }
 
 .login-subtitle {
-  margin: 12px 0 32px;
+  margin: 0 0 32px;
   text-align: center;
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.95rem;
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  margin-bottom: 24px;
 }
 
 .login-form input {
-  border: 1px solid var(--border-color);
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
   padding: 14px 16px;
   background: rgba(20, 25, 56, 0.8);
   color: #fff;
   font-size: 0.95rem;
+  font-family: inherit;
   transition: border-color 0.2s, background 0.2s;
 }
 
+.login-form input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
 .login-form input:focus {
-  border-color: var(--accent);
+  border-color: #8d7bff;
   background: rgba(30, 36, 80, 0.9);
   outline: none;
+  box-shadow: 0 0 0 3px rgba(141, 123, 255, 0.15);
 }
 
 .login-form button[type='submit'] {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
   margin-top: 8px;
-  border: none;
   border-radius: 16px;
   padding: 14px;
   font-size: 1rem;
   font-weight: 600;
-  background: linear-gradient(120deg, var(--accent), var(--accent-strong));
+  background: linear-gradient(120deg, #8d7bff, #c0a6ff);
   color: #0b0f26;
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+  text-align: center;
 }
 
-.login-form button[disabled] {
+.login-form button[type='submit']:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 25px rgba(141, 123, 255, 0.3);
+}
+
+.login-form button[type='submit']:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  transform: none;
 }
 
 .login-actions {
-  margin: 24px 0;
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+  margin-top: 16px;
 }
 
 .login-actions button {
+  all: unset;
+  box-sizing: border-box;
   flex: 1;
   border-radius: 14px;
-  border: 1px solid var(--border-color);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(16, 21, 44, 0.9);
   color: #fff;
   padding: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: border-color 0.2s, transform 0.15s;
+  text-align: center;
+}
+
+.login-actions button:hover {
+  border-color: #8d7bff;
+  transform: translateY(-1px);
 }
 
 .login-actions .secondary {
@@ -112,7 +130,7 @@ body {
 }
 
 .login-status {
-  margin: 0;
+  margin: 16px 0;
   padding: 12px 14px;
   border-radius: 12px;
   font-size: 0.95rem;
@@ -137,9 +155,12 @@ body {
   border-radius: 12px;
   background: rgba(6, 8, 20, 0.9);
   border: 1px dashed rgba(255, 255, 255, 0.12);
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
   font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.8);
   max-height: 200px;
   overflow: auto;
+  white-space: pre-wrap;
 }
 
 @keyframes float {

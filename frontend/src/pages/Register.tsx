@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/authService';
 import { AuthContext } from '../context/AuthContext';
+import '../styles/Login.css';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -65,33 +66,35 @@ export default function Register() {
   };
 
   return (
-    <div className="login-container">
-      <div className="login-card">
-        <h1 className="login-title">Create your account</h1>
-        <p className="login-subtitle">Register to start playing</p>
+    <div className="page-login">
+      <div className="login-container">
+        <div className="login-card">
+          <h1 className="login-title">Create your account</h1>
+          <p className="login-subtitle">Register to start playing</p>
 
-        <form className="login-form" onSubmit={handleSubmit}>
-          <input name="email" type="email" placeholder="Email" value={form.email} onChange={handleChange} required />
-          <input name="display_name" placeholder="Display name" value={form.display_name} onChange={handleChange} required />
-          <input name="password" type="password" placeholder="Password" value={form.password} onChange={handleChange} required />
-          <input name="twofa" placeholder="2FA code (optional)" value={form.twofa} onChange={handleChange} />
-          <button type="submit" disabled={loading}>
-            {loading ? 'Creating account…' : 'Register'}
-          </button>
-        </form>
+          <form className="login-form" onSubmit={handleSubmit}>
+            <input name="email" type="email" placeholder="Email" value={form.email} onChange={handleChange} required autoComplete="email" />
+            <input name="display_name" placeholder="Display name" value={form.display_name} onChange={handleChange} required autoComplete="nickname" />
+            <input name="password" type="password" placeholder="Password" value={form.password} onChange={handleChange} required autoComplete="new-password" />
+            <input name="twofa" placeholder="2FA code (optional)" value={form.twofa} onChange={handleChange} autoComplete="one-time-code" />
+            <button type="submit" disabled={loading}>
+              {loading ? 'Creating account…' : 'Register'}
+            </button>
+          </form>
 
-        {message && <p className={`login-status ${message.type}`}>{message.text}</p>}
+          {message && <p className={`login-status ${message.type}`}>{message.text}</p>}
 
-        <div className="login-actions">
-          <button type="button" className="secondary" onClick={() => navigate('/login')}>
-            ← Back to login
-          </button>
-          <button type="button" onClick={() => navigate('/')}>
-            Go home
-          </button>
+          <div className="login-actions">
+            <button type="button" className="secondary" onClick={() => navigate('/login')}>
+              ← Back to login
+            </button>
+            <button type="button" onClick={() => navigate('/')}>
+              Go home
+            </button>
+          </div>
+
+          {debugPayload && <pre className="login-debug">{debugPayload}</pre>}
         </div>
-
-        {debugPayload && <pre className="login-debug">{debugPayload}</pre>}
       </div>
     </div>
   );
