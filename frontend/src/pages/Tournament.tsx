@@ -8,7 +8,10 @@ type TournamentItem = {
   player_count?: number;
   max_players?: number;
   finished_at?: string | null;
-  podium?: { winner?: string; runner_up?: string; third?: string };
+  podium?: { winner?: string; runner_up?: string; third?: string; winner_id?: number };
+  // New winner id (backend may use winner_id or winnerId)
+  winner_id?: number;
+  winnerId?: number;
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || window.location.origin;
@@ -29,6 +32,10 @@ function decodeUserId(): number | null {
   } catch {
     return null;
   }
+}
+function pickName(obj: any): string | null {
+  if (!obj) return null;
+  return obj.display_name ?? obj.alias ?? obj.name ?? obj.username ?? null;
 }
 
 export default function Tournament() {
@@ -78,24 +85,41 @@ export default function Tournament() {
       setItems(filteredList);
 
       if (f === 'finished' && filteredList.length) {
-        // Only compute champions for finished tournaments from podium (not per-game leaderboard)
+        // Resolve champion names using winner_id from the tournament (preferred).
+        // We DO NOT pick the top of the leaderboard for unfinished tournaments.
         setStatus('Loading winners…');
         try {
           const entries = await Promise.all(
             filteredList.map(async (t) => {
-              if (t.podium?.winner) return [t.id, t.podium.winner] as [number, string | null];
-              // Optional: try a podium endpoint if your backend provides it
-              try {
-                const r = await fetch(`${API_BASE}/api/pong/tournaments/${t.id}/podium`, {
-                  credentials: 'include',
-                  headers: authHeaders(),
-                });
-                const pd = await r.json().catch(() => ({}));
-                const champ = pd?.winner ?? pd?.podium?.winner ?? null;
-                return [t.id, champ] as [number, string | null];
-              } catch {
-                return [t.id, null] as [number, string | null];
+              // Prefer explicit winner id from item
+              const wId =
+                t.winner_id ??
+                t.winnerId ??
+                t.podium?.winner_id ??
+                null;
+
+              if (wId) {
+                // Resolve name via leaderboard (has user_id + display fields)
+                try {
+                  const r = await fetch(`${API_BASE}/api/pong/tournaments/${t.id}/leaderboard`, {
+                    credentials: 'include',
+                    headers: authHeaders(),
+                  });
+                  const lb = await r.json().catch(() => ({}));
+                  const rows: any[] = lb?.leaderboard ?? [];
+                  const match = rows.find((row: any) => (row.user_id ?? row.id) === wId);
+                  const name = pickName(match);
+                  if (name) return [t.id, name] as [number, string | null];
+                } catch {
+                  // ignore and fall back to podium winner
+                }
               }
+
+              // Fallback to provided podium winner string if present
+              if (t.podium?.winner) return [t.id, t.podium.winner] as [number, string | null];
+
+              // No info found
+              return [t.id, null] as [number, string | null];
             })
           );
           setWinners(Object.fromEntries(entries));
