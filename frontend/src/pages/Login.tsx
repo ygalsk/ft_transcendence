@@ -3,10 +3,11 @@ import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/authService';
 import { AuthContext } from '../context/AuthContext';
+import '../styles/Login.css';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { setUser } = useContext(AuthContext); // consume context setter
+  const { setUser } = useContext(AuthContext);
   const [form, setForm] = useState({ email: '', password: '', twofa: '' });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
@@ -60,32 +61,34 @@ export default function Login() {
   };
 
   return (
-    <div className="login-container">
-      <div className="login-card">
-        <h1 className="login-title">Welcome Back</h1>
-        <p className="login-subtitle">Sign in to reach the API</p>
+    <div className="page-login">
+      <div className="login-container">
+        <div className="login-card">
+          <h1 className="login-title">Welcome Back</h1>
+          <p className="login-subtitle">Sign in to reach the API</p>
 
-        <form className="login-form" onSubmit={handleSubmit}>
-          <input name="email" type="email" placeholder="Email" value={form.email} onChange={handleChange} required />
-          <input name="password" type="password" placeholder="Password" value={form.password} onChange={handleChange} required />
-          <input name="twofa" placeholder="2FA code (optional)" value={form.twofa} onChange={handleChange} />
-          <button type="submit" disabled={loading}>
-            {loading ? 'Contacting API…' : 'Login'}
-          </button>
-        </form>
+          <form className="login-form" onSubmit={handleSubmit}>
+            <input name="email" type="email" placeholder="Email" value={form.email} onChange={handleChange} required autoComplete="email" />
+            <input name="password" type="password" placeholder="Password" value={form.password} onChange={handleChange} required autoComplete="current-password" />
+            <input name="twofa" placeholder="2FA code (optional)" value={form.twofa} onChange={handleChange} autoComplete="one-time-code" />
+            <button type="submit" disabled={loading}>
+              {loading ? 'Contacting API…' : 'Login'}
+            </button>
+          </form>
 
-        {message && <p className={`login-status ${message.type}`}>{message.text}</p>}
+          {message && <p className={`login-status ${message.type}`}>{message.text}</p>}
 
-        <div className="login-actions">
-          <button type="button" className="secondary" onClick={() => navigate('/')}>
-            ← Back home
-          </button>
-          <button type="button" onClick={handleMe}>
-            Call /api/user/me
-          </button>
+          <div className="login-actions">
+            <button type="button" className="secondary" onClick={() => navigate('/')}>
+              ← Back home
+            </button>
+            <button type="button" onClick={handleMe}>
+              Call /api/user/me
+            </button>
+          </div>
+
+          {debugPayload && <pre className="login-debug">{debugPayload}</pre>}
         </div>
-
-        {debugPayload && <pre className="login-debug">{debugPayload}</pre>}
       </div>
     </div>
   );
