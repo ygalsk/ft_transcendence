@@ -30,7 +30,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     headers.set('Authorization', `Bearer ${authToken}`);
   }
 
-  if (!headers.has('Content-Type') && options.body instanceof Blob === false) {
+  // ✅ FIX: Don't set Content-Type for FormData (browser sets it with boundary)
+  if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
 
@@ -48,11 +49,36 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 export const apiClient = {
-  get: <T>(path: string, options?: RequestOptions) => request<T>(path, { ...options, method: 'GET' }),
-  post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
-    request<T>(path, {
+  async get<T>(path: string, options?: RequestOptions): Promise<T> {
+    return request<T>(path, { ...options, method: 'GET' });
+  },
+
+  async post<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T> {
+    return request<T>(path, {
       ...options,
       method: 'POST',
       body: body instanceof FormData ? body : JSON.stringify(body ?? {}),
-    }),
+    });
+  },
+
+  async put<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T> {
+    return request<T>(path, {
+      ...options,
+      method: 'PUT',
+      body: body instanceof FormData ? body : JSON.stringify(body ?? {}),
+    });
+  },
+
+  async patch<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T> {
+    return request<T>(path, {
+      ...options,
+      method: 'PATCH',
+      body: body instanceof FormData ? body : JSON.stringify(body ?? {}),
+    });
+  },
+
+  async delete<T>(path: string, options?: RequestOptions): Promise<T> {
+    return request<T>(path, { ...options, method: 'DELETE' });
+  },
 };
+

@@ -89,6 +89,12 @@
 }
 
 /* User pill */
+.nav-user {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .nav-user .user-pill {
   display: flex;
   gap: 10px;
@@ -97,6 +103,17 @@
   border-radius: 999px;
   background: rgba(16,20,44,0.6);
   border: 1px solid rgba(255,255,255,0.03);
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.nav-user .user-pill:hover,
+.nav-user .user-pill:focus {
+  background: rgba(16,20,44,0.8);
+  border-color: rgba(142, 122, 255, 0.3);
+  outline: none;
 }
 
 .user-avatar {
