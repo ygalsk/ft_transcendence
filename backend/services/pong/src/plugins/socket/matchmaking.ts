@@ -9,12 +9,13 @@ import type {
 import { setupRoom } from "./room-setup";
 import { emitMatchReady, scheduleStart } from "./notifications";
 import { getDisplayName } from "./user";
+import { pongMatchmakingQueueSize } from "../../metrics/pong.metrics";
 
 export class CasualMatchmaker {
   private waiting: Socket | null = null;
 
   constructor(
-    private readonly userServiceUrl: string,
+    private readonly userServiceUrl: string, //dont remove
     private readonly defaultScoreLimit: number
   ) {}
 
@@ -44,7 +45,7 @@ export class CasualMatchmaker {
       if (!side) {
         fastify.log.error(
           { matchId, userId: user.userId },
-          "Failed to assign side in vsAi match"
+          "Failed to assign side in Human vs Ai match"
         );
         socket.emit("error", { message: "Unable to join match" });
         return;
@@ -73,9 +74,14 @@ export class CasualMatchmaker {
       return;
     }
 
+    // Human vs Human matchmaking
     if (!this.waiting) {
       this.waiting = socket;
-      socket.emit("waiting", { message: "🕐 Waiting for opponent..." });
+      
+      // Track queue size increase
+      pongMatchmakingQueueSize.set(1);
+      
+      socket.emit("waiting", { message: " Waiting for opponent..." });
       fastify.log.info({ socketId: socket.id }, "Player added to matchmaking queue");
       return;
     }
@@ -85,6 +91,9 @@ export class CasualMatchmaker {
     const p1 = this.waiting;
     const p1User = this.getUser(p1);
     this.waiting = null;
+    
+    // Track queue emptied
+    pongMatchmakingQueueSize.set(0);
 
     const matchId = `casual-${p1.id}-${socket.id}-${Date.now()}`;
     const config: MatchConfig = {
@@ -102,6 +111,13 @@ export class CasualMatchmaker {
       avatarUrl: undefined,
     });
 
+    if (!p1Side) {
+      fastify.log.error({ matchId, userId: p1User.userId }, "Failed to assign side to p1");
+      p1.emit("error", { message: "Unable to join match" });
+      socket.emit("error", { message: "Unable to join match" });
+      return;
+    }
+
     const p2Side = room.addHumanPlayer({
       socketId: socket.id,
       userId: user.userId,
@@ -109,72 +125,52 @@ export class CasualMatchmaker {
       avatarUrl: undefined,
     });
 
-    if (!p1Side || !p2Side) {
-      fastify.log.error({ matchId }, "Failed to assign sides in casual matchmaking");
-      p1.emit("error", { message: "Failed to create match" });
-      socket.emit("error", { message: "Failed to create match" });
+    if (!p2Side) {
+      fastify.log.error({ matchId, userId: user.userId }, "Failed to assign side to p2");
+      socket.emit("error", { message: "Unable to join match" });
+      p1.emit("error", { message: "Unable to join match" });
       return;
     }
 
-    const p1Session = this.getSession(p1);
-    p1Session.roomId = room.id;
-    p1Session.side = p1Side;
-
+    (p1.data.session as SocketSession).roomId = room.id;
+    (p1.data.session as SocketSession).side = p1Side;
     session.roomId = room.id;
     session.side = p2Side;
 
     p1.join(room.id);
     socket.join(room.id);
 
-    const left = room.players.left;
-    const right = room.players.right;
-
     p1.emit("match_start", {
       matchId: room.id,
       you: p1Side,
-      opponent: p1Side === "left" ? right?.displayName : left?.displayName,
+      opponent: displayName,
       mode: "casual",
     });
-
     socket.emit("match_start", {
       matchId: room.id,
       you: p2Side,
-      opponent: p2Side === "left" ? right?.displayName : left?.displayName,
+      opponent: getDisplayName(p1User),
       mode: "casual",
     });
 
     const startAt = emitMatchReady(fastify, room, "casual");
     scheduleStart(room, startAt);
     fastify.log.info(
-      {
-        roomId: room.id,
-        leftUserId: left?.userId,
-        rightUserId: right?.userId,
-      },
-      "Casual human-vs-human match started"
+      { roomId: room.id, p1Side, p2Side },
+      "Casual PvP match started"
     );
   }
 
   public handleDisconnect(socketId: string): void {
     if (this.waiting?.id === socketId) {
       this.waiting = null;
+      
+      // Track queue emptied
+      pongMatchmakingQueueSize.set(0);
     }
-  }
-
-  private getSession(socket: Socket): SocketSession {
-    if (!socket.data.session) {
-      socket.data.session = {};
-    }
-    return socket.data.session as SocketSession;
   }
 
   private getUser(socket: Socket): SocketUser {
-    return (
-      (socket.data.user as SocketUser | undefined) ?? {
-        userId: null,
-        email: null,
-        display_name: "Guest",
-      }
-    );
+    return socket.data.user as SocketUser;
   }
 }
