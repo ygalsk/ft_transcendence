@@ -73,6 +73,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
     return reply.send({ message: 'Profile updated' });
   });
 
+  
   // GET /leaderboard - Get top 10 users
   fastify.get('/leaderboard', async () => {
     const rows = fastify.db.prepare(`
@@ -83,6 +84,30 @@ export default async function userRoutes(fastify: FastifyInstance) {
     `).all();
 
     return { leaderboard: rows };
+  });
+
+  // GET /search - Search users by display name
+  fastify.get<{
+    Querystring: { q: string; limit?: string }
+  }>('/search', async (request, reply) => {
+    const { q, limit = '20' } = request.query;
+
+    if (!q || q.trim().length === 0) {
+      return reply.code(400).send({ error: 'Search query is required' });
+    }
+
+    const searchTerm = `%${q.trim()}%`;
+    const resultLimit = Math.min(parseInt(limit, 10) || 20, 50); // Max 50 results
+
+    const users = fastify.db.prepare(`
+      SELECT id, display_name, avatar_url, bio, wins, losses, online
+      FROM users
+      WHERE display_name LIKE ? COLLATE NOCASE
+      ORDER BY display_name ASC
+      LIMIT ?
+    `).all(searchTerm, resultLimit);
+
+    return { users, count: users.length };
   });
 
   //file size limit handled in app.ts by fastify/multipart
