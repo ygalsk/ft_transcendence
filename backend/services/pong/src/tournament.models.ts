@@ -1,4 +1,4 @@
-import type { MatchFinishedPayload } from "./game/room";
+import type { MatchFinishedPayload } from "./game/room/types";
 import type { TournamentMatchCompleteType } from "../shared/schemas/tournament.schema";
 
 export interface TournamentMatchReport {

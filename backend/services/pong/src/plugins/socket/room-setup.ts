@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { createRoom, removeRoom, Room } from "../../game/room";
-import type { RoomHooks } from "../../game/room";
+import { Room } from "../../game/room/room";
+import { createRoom, removeRoom } from "../../game/room/registry";
+import type { RoomHooks, } from "../../game/room/types";
 import type { MatchConfig } from "../../game/types";
 import { reportCasualMatch, reportTournamentMatch } from "./reporters";
 

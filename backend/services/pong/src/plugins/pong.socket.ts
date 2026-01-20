@@ -1,7 +1,7 @@
 import fp from "fastify-plugin";
 import type { FastifyInstance } from "fastify";
 import type { Socket } from "socket.io";
-import { getRoom } from "../game/room";
+import { getRoom } from "../game/room/registry";
 import type { PlayerInput } from "../game/types";
 import { CasualMatchmaker } from "./socket/matchmaking";
 import { handleJoinMatch } from "./socket/join-match";

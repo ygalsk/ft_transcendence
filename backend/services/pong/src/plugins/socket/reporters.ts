@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { generateServiceToken } from "../../../shared/plugins/auth";
-import type { MatchFinishedPayload } from "../../game/room";
+import type { MatchFinishedPayload } from "../../game/room/types";
 
 export async function reportTournamentMatch(
   fastify: FastifyInstance,

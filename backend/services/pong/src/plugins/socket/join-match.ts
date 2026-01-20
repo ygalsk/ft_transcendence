@@ -1,5 +1,5 @@
 import type { MatchConfig, PlayerSide } from "../../game/types";
-import { getRoom } from "../../game/room";
+import { getRoom } from "../../game/room/registry";
 import { setupRoom } from "./room-setup";
 import { getDisplayName } from "./user";
 import { emitMatchReady, scheduleStart } from "./notifications";

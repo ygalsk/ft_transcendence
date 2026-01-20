@@ -1,17 +1,10 @@
-//
-// src/routes/match.routes.ts
-//
-
 import { FastifyInstance } from "fastify";
-import { createRoom, getRoom, rooms } from "../game/room";
+import { createRoom, getRoom, rooms } from "../game/room/registry";
 import { MatchConfig } from "../game/types";
 
 export default async function matchRoutes(fastify: FastifyInstance) {
 
-  // ------------------------------------
   // Create a casual match (HTTP API)
-  // Useful for frontend tests
-  // ------------------------------------
   fastify.post<{ 
     Body: { vsAi?: boolean; scoreLimit?: number } 
   }>("/match", async (request, reply) => {
@@ -35,9 +28,7 @@ export default async function matchRoutes(fastify: FastifyInstance) {
     });
   });
 
-  // ------------------------------------
   // Get info about a given match/room
-  // ------------------------------------
   fastify.get<{ Params: { matchId: string } }>("/match/:matchId", async (request, reply) => {
     const { matchId } = request.params;
 

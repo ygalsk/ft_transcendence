@@ -1,3 +1,4 @@
+import type { Socket } from "socket.io";
 import { AiController } from "../ai";
 import { createInitialBall, createInitialPaddles, MS_PER_TICK } from "../physics";
 import type { AiDifficulty, GameState, MatchConfig, PlayerInput, PlayerSide, RoomPlayer, ScoreState, SerializedGameState } from "../types";
@@ -288,6 +289,27 @@ export class Room {
       clearTimeout(this.noShowTimer);
       this.noShowTimer = null;
     }
+  }
+  
+  hasPlayer(socket: Socket): boolean {
+    const socketId = socket.id;
+    return (
+      this.players.left?.socketId === socketId ||
+      this.players.right?.socketId === socketId
+    );
+  }
+
+  cleanup(): void {
+    // Stop all timers and intervals
+    this.stop();
+    
+    // Clear AI controllers
+    this.aiControllers = {};
+    
+    // Clear spectators
+    this.spectators = [];
+    
+    this.hooks.log("info", "Room cleaned up", { roomId: this.id });
   }
 
   private get humanContext() {
