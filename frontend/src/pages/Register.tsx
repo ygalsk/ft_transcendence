@@ -1,9 +1,8 @@
-import { useState, useContext } from 'react';
+import React, { useContext, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/authService';
-import AuthContext from '../context/AuthContext';
-import '../styles/Login.css';
+import { AuthContext } from '../context/AuthContext';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -34,14 +33,13 @@ export default function Register() {
       setDebugPayload(JSON.stringify(result, null, 2));
 
       if (!(result as any).error) {
-        // Auto-login with the new account
+        // Optionally auto-login, then hydrate from /api/user/me
         try {
           await authService.login(form.email, form.password, form.twofa || undefined);
         } catch {
-          // ignore if login already set session via register
+          // ignore
         }
 
-        // Hydrate context and redirect
         try {
           const profile = await authService.me<Record<string, unknown>>();
           const normalized =
@@ -50,10 +48,10 @@ export default function Register() {
             profile;
           setUser?.(normalized as any);
         } catch {
-          // ignore; still redirect
+          // ignore
         }
 
-        setMessage({ type: 'success', text: 'Account created. Logging you in…' });
+        setMessage({ type: 'success', text: 'Account created. Redirecting…' });
         navigate('/');
         return;
       }

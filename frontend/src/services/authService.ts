@@ -27,15 +27,16 @@ export const authService = {
     return data;
   },
 
+
   async me<T extends Record<string, unknown>>() {
-    return apiClient.get<T>('/api/auth/me');
+    return apiClient.get<T>('/api/user/me');
   },
 
   logout() {
     setAuthToken(null);
   },
 
-  // Use display_name as required by the backend
+
   async register(input: { email: string; display_name: string; password: string; twofa?: string }): Promise<RegisterResponse> {
     const payload: Record<string, unknown> = {
       email: input.email,

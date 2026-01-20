@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useContext } from 'react';
 import { io, Socket } from 'socket.io-client';
-import AuthContext from '../context/AuthContext';
+import { AuthContext } from '../context/AuthContext';
 import '../styles/Play.css';
 
 type GameState = {

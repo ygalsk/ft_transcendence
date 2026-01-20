@@ -9,7 +9,6 @@ type TournamentItem = {
   max_players?: number;
   finished_at?: string | null;
   podium?: { winner?: string; runner_up?: string; third?: string; winner_id?: number };
-  // New winner id (backend may use winner_id or winnerId)
   winner_id?: number;
   winnerId?: number;
 };
@@ -21,14 +20,16 @@ function getToken(): string | null {
 }
 function authHeaders(extra: Record<string, string> = {}) {
   const token = getToken();
-  return token ? { Authorization: `Bearer ${token}`, ...extra } : { ...extra };
+  return token
+    ? { Authorization: `Bearer ${token}`, Accept: 'application/json', ...extra }
+    : { Accept: 'application/json', ...extra };
 }
 function decodeUserId(): number | null {
   const token = getToken();
   if (!token) return null;
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
-    return payload.userId ?? null;
+    return payload.userId ?? payload.user_id ?? payload.sub ?? null;
   } catch {
     return null;
   }
@@ -61,12 +62,14 @@ export default function Tournament() {
     setStatus('Loading tournaments…');
     try {
       const res = await fetch(
-        `${API_BASE}/api/pong/tournaments/?status=${f}&q=${encodeURIComponent(q)}`,
+        `${API_BASE}/api/pong/tournaments?status=${f}&q=${encodeURIComponent(q)}`,
         { credentials: 'include', headers: authHeaders() }
       );
       if (!res.ok) {
         setAuthed(res.status !== 401);
-        const data = await res.json().catch(() => ({}));
+        const text = await res.text().catch(() => '');
+        let data: any = {};
+        try { data = text ? JSON.parse(text) : {}; } catch {}
         setItems([]);
         setWinners({});
         setStatus(data?.error || data?.message || `HTTP ${res.status}`);
@@ -76,7 +79,6 @@ export default function Tournament() {
       const data = await res.json();
 
       const listRaw: TournamentItem[] = data.tournaments || [];
-      // Ensure finished view only shows truly finished tournaments
       const filteredList =
         f === 'finished'
           ? listRaw.filter((t) => (t.status ?? '').toLowerCase() === 'finished')
@@ -85,13 +87,10 @@ export default function Tournament() {
       setItems(filteredList);
 
       if (f === 'finished' && filteredList.length) {
-        // Resolve champion names using winner_id from the tournament (preferred).
-        // We DO NOT pick the top of the leaderboard for unfinished tournaments.
         setStatus('Loading winners…');
         try {
           const entries = await Promise.all(
             filteredList.map(async (t) => {
-              // Prefer explicit winner id from item
               const wId =
                 t.winner_id ??
                 t.winnerId ??
@@ -99,7 +98,6 @@ export default function Tournament() {
                 null;
 
               if (wId) {
-                // Resolve name via leaderboard (has user_id + display fields)
                 try {
                   const r = await fetch(`${API_BASE}/api/pong/tournaments/${t.id}/leaderboard`, {
                     credentials: 'include',
@@ -115,10 +113,7 @@ export default function Tournament() {
                 }
               }
 
-              // Fallback to provided podium winner string if present
               if (t.podium?.winner) return [t.id, t.podium.winner] as [number, string | null];
-
-              // No info found
               return [t.id, null] as [number, string | null];
             })
           );
@@ -146,15 +141,19 @@ export default function Tournament() {
     }
     setStatus('Creating tournament…');
     try {
-      const r = await fetch(`${API_BASE}/api/pong/tournaments/`, {
+      const url = `${API_BASE}/api/pong/tournaments`;
+      const body = { name: name.trim(), max_players: Number(maxPlayers), maxPlayers: Number(maxPlayers) };
+      const r = await fetch(url, {
         method: 'POST',
         credentials: 'include',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ name, max_players: maxPlayers}),
+        body: JSON.stringify(body),
       });
-      const data = await r.json().catch(() => ({}));
+      const text = await r.text().catch(() => '');
+      let data: any = {};
+      try { data = text ? JSON.parse(text) : {}; } catch {}
       if (!r.ok) {
-        setStatus(data?.error || data?.message || 'Create failed');
+        setStatus(data?.error || data?.message || text || 'Create failed');
         return;
       }
       setStatus('Tournament created.');
@@ -170,21 +169,18 @@ export default function Tournament() {
     setStatus(`Joining #${id}…`);
     try {
       const url = `${API_BASE}/api/pong/tournaments/join`;
-      console.debug('POST', url, { tournamentId: id });
+      const body = { tournament_id: id, tournamentId: id };
       const r = await fetch(url, {
         method: 'POST',
         credentials: 'include',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ tournamentId: id }),
+        body: JSON.stringify(body),
       });
-      const text = await r.text();
+      const text = await r.text().catch(() => '');
       let data: any = {};
-      try {
-        data = JSON.parse(text);
-      } catch {}
+      try { data = text ? JSON.parse(text) : {}; } catch {}
       if (!r.ok) {
-        console.error('Join failed:', r.status, text);
-        setStatus(data?.error || data?.message || `Join failed (HTTP ${r.status})`);
+        setStatus(data?.error || data?.message || text || `Join failed (HTTP ${r.status})`);
         return;
       }
       setStatus('Joined.');
@@ -201,12 +197,13 @@ export default function Tournament() {
     setStatus('Loading leaderboard…');
     try {
       const url = `${API_BASE}/api/pong/tournaments/${id}/leaderboard`;
-      console.debug('GET', url);
       const r = await fetch(url, {
         credentials: 'include',
         headers: authHeaders(),
       });
-      const data = await r.json();
+      const text = await r.text().catch(() => '');
+      let data: any = {};
+      try { data = text ? JSON.parse(text) : {}; } catch {}
       setLeaderboard(data);
       setStatus('Leaderboard loaded.');
     } catch (e: any) {
@@ -218,16 +215,17 @@ export default function Tournament() {
     setStatus('Starting tournament…');
     try {
       const url = `${API_BASE}/api/pong/tournaments/${id}/start`;
-      console.debug('POST', url);
       const r = await fetch(url, {
         method: 'POST',
         credentials: 'include',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({}),
       });
-      const data = await r.json().catch(() => ({}));
+      const text = await r.text().catch(() => '');
+      let data: any = {};
+      try { data = text ? JSON.parse(text) : {}; } catch {}
       if (!r.ok) {
-        setStatus(data?.error || data?.message || 'Start failed');
+        setStatus(data?.error || data?.message || text || 'Start failed');
         return;
       }
       setStatus('Tournament started.');
@@ -258,9 +256,10 @@ export default function Tournament() {
       const url =
         `${API_BASE}/api/pong/tournaments/${id}/next-match` +
         (userId ? `?userId=${userId}` : '');
-      console.debug('GET', url);
       const r = await fetch(url, { credentials: 'include', headers: authHeaders() });
-      const data = await r.json();
+      const text = await r.text().catch(() => '');
+      let data: any = {};
+      try { data = text ? JSON.parse(text) : {}; } catch {}
       if (data.status === 'waiting') {
         setStatus('No match yet. Waiting…');
         scheduleNextMatchPoll(3000);
@@ -286,7 +285,6 @@ export default function Tournament() {
     }
   };
 
-  // Auto-load details when a row is selected
   useEffect(() => {
     if (!selected) {
       setLeaderboard(null);
@@ -297,7 +295,6 @@ export default function Tournament() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
 
-  // Initial load + periodic refresh that respects current filter/search
   useEffect(() => {
     loadTournaments(filter, search);
     const t = setInterval(() => {
@@ -361,11 +358,8 @@ export default function Tournament() {
 
         <p className="tournament-status" style={{ opacity: 0.85, marginTop: 8 }}>{status}</p>
 
-        {/* Two-column layout: table left, details right */}
         <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', marginTop: 16 }}>
-          {/* Left: list/table */}
           <div style={{ flex: 1, minWidth: 520 }}>
-            {/* Create form */}
             <section className="create-panel" style={{ marginTop: 12, marginBottom: 12 }}>
               <h2 style={{ margin: '8px 0' }}>Create tournament</h2>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -442,7 +436,6 @@ export default function Tournament() {
             </div>
           </div>
 
-          {/* Right: details panel (keeps list visible) */}
           <aside style={{ width: 380 }}>
             <div style={{ position: 'sticky', top: 16 }}>
               <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: 12 }}>
@@ -452,7 +445,6 @@ export default function Tournament() {
                   <div style={{ opacity: 0.75 }}>Select a tournament to see actions and leaderboard.</div>
                 ) : (
                   <>
-                    {/* Actions */}
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
                       <button
                         className="btn btn--primary"
@@ -498,7 +490,6 @@ export default function Tournament() {
                       Status: {selected.status} • Players: {selected.player_count}/{selected.max_players}
                     </p>
 
-                    {/* Leaderboard only (bracket removed) */}
                     <h4 style={{ margin: '4px 0 8px' }}>Leaderboard</h4>
                     {leaderboard?.leaderboard?.length ? (
                       <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>

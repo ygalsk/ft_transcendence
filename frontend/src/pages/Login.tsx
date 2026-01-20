@@ -1,9 +1,8 @@
-import { useState, useContext } from 'react';
+import React, { useContext, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/authService';
-import AuthContext from '../context/AuthContext';
-import '../styles/Login.css';
+import { AuthContext } from '../context/AuthContext';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -13,13 +12,10 @@ export default function Login() {
   const [message, setMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
   const [debugPayload, setDebugPayload] = useState<string | null>(null);
 
-  // ...exi
-
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
-
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -31,7 +27,7 @@ export default function Login() {
       const result = await authService.login(form.email, form.password, form.twofa || undefined);
       setDebugPayload(JSON.stringify(result, null, 2));
 
-      // Immediately hydrate context from /api/auth/me (cookie-based auth)
+      // Hydrate context from /api/user/me
       try {
         const profile = await authService.me<Record<string, unknown>>();
         const normalized =
@@ -53,14 +49,13 @@ export default function Login() {
     }
   };
 
-
   const handleMe = async () => {
     try {
       const profile = await authService.me<Record<string, unknown>>();
       setDebugPayload(JSON.stringify(profile, null, 2));
-      setMessage({ type: 'success', text: 'Fetched /api/auth/me payload.' });
+      setMessage({ type: 'success', text: 'Fetched /api/user/me payload.' });
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.message ?? 'Unable to fetch /api/auth/me' });
+      setMessage({ type: 'error', text: error.message ?? 'Unable to fetch /api/user/me' });
     }
   };
 
@@ -86,7 +81,7 @@ export default function Login() {
             ← Back home
           </button>
           <button type="button" onClick={handleMe}>
-            Call /api/auth/me
+            Call /api/user/me
           </button>
         </div>
 

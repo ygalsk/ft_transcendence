@@ -1,70 +1,90 @@
-import React, { createContext, useState, useEffect } from 'react';
-import type { ReactNode } from 'react';
+import React, { createContext, useEffect, useMemo, useState, useCallback } from 'react';
 import { authService } from '../services/authService';
 
-type User = Record<string, any> | null;
+export type AuthUser = {
+  id?: number | string;
+  email?: string;
+  display_name?: string;
+  avatar_url?: string;
+  bio?: string;
+  online?: number | boolean;
+  last_seen?: string;
+  wins?: number;
+  losses?: number;
+  [key: string]: unknown;
+};
 
-type AuthContextType = {
-  user: User;
+type AuthContextValue = {
+  user: AuthUser | null;
+  setUser: (u: AuthUser | null) => void;
   isAuthenticated: boolean;
   loading: boolean;
-  logout: () => Promise<void>;
-  setUser?: (u: User) => void;
+  error: string | null;
+  refresh: () => Promise<void>;
+  logout: () => void;
 };
 
-const defaultCtx: AuthContextType = {
+export const AuthContext = createContext<AuthContextValue>({
   user: null,
+  setUser: () => {},
   isAuthenticated: false,
-  loading: true,
-  logout: async () => {},
-};
+  loading: false,
+  error: null,
+  refresh: async () => {},
+  logout: () => {},
+});
 
-const AuthContext = createContext<AuthContextType>(defaultCtx);
-
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User>(null);
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const profile = await authService.me<Record<string, any>>();
-        if (!mounted) return;
-        // Normalize common shapes: {user}, {data}, or flat
-        const normalized =
-          (profile as any)?.user ??
-          (profile as any)?.data ??
-          profile;
-        setUser(normalized as User);
-      } catch {
-        if (mounted) setUser(null);
-      } finally {
-        if (mounted) setLoading(false);
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const profile = await authService.me<Record<string, unknown>>();
+      const normalized = (profile as any)?.user ?? (profile as any)?.data ?? profile;
+      setUser(normalized as AuthUser);
+    } catch (e: any) {
+      const status = e?.status ?? e?.response?.status;
+      // Treat 401/404 as not authenticated without showing error
+      if (status === 401 || status === 404) {
+        setUser(null);
+        setError(null);
+      } else {
+        setUser(null);
+        setError(e?.message ?? 'Failed to load user');
       }
-    })();
-    return () => {
-      mounted = false;
-    };
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const logout = async () => {
-    try {
-      await authService.logout();
-    } finally {
-      setUser(null);
-    }
-  };
+  useEffect(() => {
+    // Initial hydration on mount
+    refresh();
+  }, [refresh]);
 
-  const value: AuthContextType = {
-    user,
-    isAuthenticated: !!user,
-    loading,
-    logout,
-    setUser,
-  };
+  const logout = useCallback(() => {
+    authService.logout();
+    setUser(null);
+  }, []);
+
+  const value = useMemo<AuthContextValue>(() => {
+    return {
+      user,
+      setUser,
+      isAuthenticated: !!user,
+      loading,
+      error,
+      refresh,
+      logout,
+    };
+  }, [user, loading, error, refresh, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
+// Keep default export for any legacy default imports
 export default AuthContext;
