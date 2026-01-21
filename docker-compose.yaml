@@ -90,6 +90,8 @@ services:
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./IaC/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./IaC/grafana/dashboards:/var/lib/grafana/dashboards:ro
     networks:
       - backend
     depends_on:
