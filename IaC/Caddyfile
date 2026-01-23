@@ -28,6 +28,18 @@ https://transcendence.keystone-gateway.dev {
         uri strip_prefix /api/pong
         reverse_proxy pong-service:6061
     }
+        handle /metrics/auth {
+        rewrite * /metrics
+        reverse_proxy auth-service:4000
+    }
+    handle /metrics/user {
+        rewrite * /metrics
+        reverse_proxy user-service:5000
+    }
+    handle /metrics/pong {
+        rewrite * /metrics
+        reverse_proxy pong-service:6061
+    }
     handle /socket.io/* {
         reverse_proxy pong-service:6061 {
             header_up Upgrade {http.request.header.Upgrade}
