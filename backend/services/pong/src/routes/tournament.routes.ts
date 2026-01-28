@@ -62,7 +62,6 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
     },async (request, reply) => {
 
       const userId = request.user!.userId;
-      const displayName = request.user!.display_name;
       const { tournamentId} = request.body;
 
       const tournament = fastify.db
@@ -86,7 +85,6 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
         fastify.log.info({
           tournamentId,
           userId,
-          displayName,
           currentCount: count,
           maxPlayers: tournament.max_players,
           willAllow: count < tournament.max_players,
@@ -97,13 +95,12 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
           throw new Error("Tournament is full");
 
         fastify.db
-          .prepare(`INSERT INTO tournament_players (tournament_id, user_id, display_name) VALUES (?, ?, ?)`)
-          .run(tournamentId, userId, displayName);
+          .prepare(`INSERT INTO tournament_players (tournament_id, user_id) VALUES (?, ?)`)
+          .run(tournamentId, userId);
 
         fastify.log.info({
           tournamentId,
-          userId,
-          displayName
+          userId
         }, 'Tournament join successful');
       });
 
@@ -118,7 +115,7 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
         throw err;
       }
 
-      return reply.send({ message: "Joined", displayName });
+      return reply.send({ message: "Joined"});
     }
   );
 
@@ -135,7 +132,7 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
 
     const players = fastify.db
       .prepare(
-        `SELECT tp.user_id, tp.display_name, tp.seed
+        `SELECT tp.user_id, tp.seed
          FROM tournament_players tp
          WHERE tp.tournament_id = ?
          ORDER BY tp.seed`
@@ -151,8 +148,8 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
     const matches = fastify.db
       .prepare(
         `SELECT tm.*,
-                lp.display_name AS left_display_name,
-                rp.display_name AS right_display_name
+                lp.user_id AS left_user_id,
+                rp.user_id AS right_user_id
          FROM tournament_matches tm
          LEFT JOIN tournament_players lp ON lp.tournament_id = tm.tournament_id AND lp.user_id = tm.left_player_id
          LEFT JOIN tournament_players rp ON rp.tournament_id = tm.tournament_id AND rp.user_id = tm.right_player_id
@@ -170,7 +167,7 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
 
     const leaderboard = fastify.db
       .prepare(
-        `SELECT tp.user_id, tp.display_name, tp.seed,
+        `SELECT tp.user_id, tp.seed,
                 SUM(CASE WHEN tm.winner_id = tp.user_id THEN 1 ELSE 0 END) AS wins,
                 SUM(CASE WHEN tm.status = 'finished' AND tm.winner_id != tp.user_id THEN 1 ELSE 0 END) AS losses
          FROM tournament_players tp
@@ -178,7 +175,7 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
            AND (tm.left_player_id = tp.user_id OR tm.right_player_id = tp.user_id)
            AND tm.status = 'finished'
          WHERE tp.tournament_id = ?
-         GROUP BY tp.user_id, tp.display_name, tp.seed
+         GROUP BY tp.user_id, tp.seed
          ORDER BY wins DESC, losses ASC`
       )
       .all(id);
@@ -239,9 +236,6 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
 
     const pending = matches.find(m => m.status === 'pending');
     if (pending) {
-      const getName = fastify.db.prepare(
-        `SELECT display_name FROM tournament_players WHERE tournament_id = ? AND user_id = ?`
-      );
 
       const isLeft = pending.left_player_id === Number(userId);
       const opponentId = isLeft ? pending.right_player_id : pending.left_player_id;
@@ -254,9 +248,6 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const yourName = (getName.get(id, Number(userId)) as any)?.display_name;
-      const opponentName = (getName.get(id, opponentId) as any)?.display_name;
-
       return reply.send({
         status: 'ready',
         tournamentId: Number(id),
@@ -264,9 +255,7 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
         matchKey: pending.pong_match_id,
         round: pending.round,
         yourUserId: Number(userId),
-        yourName,
         opponentUserId: opponentId,
-        opponentName
       });
     }
 
