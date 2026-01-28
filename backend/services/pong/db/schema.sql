@@ -42,7 +42,6 @@ CREATE INDEX IF NOT EXISTS idx_tournament_created_by ON tournaments(created_by);
 CREATE TABLE IF NOT EXISTS tournament_players (
   tournament_id INTEGER NOT NULL,
   user_id INTEGER NOT NULL,
-  display_name TEXT NOT NULL,
   seed INTEGER,                               -- Assigned after tournament starts
   joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (tournament_id, user_id),

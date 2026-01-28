@@ -34,7 +34,7 @@ export class TournamentService {
          WHERE tournament_id = ?
          ORDER BY RANDOM()`
       )
-      .all(tournamentId) as { user_id: number; display_name: string }[];
+      .all(tournamentId) as { user_id: number}[];
 
     if (playersRaw.length < 2)
       throw new Error('Not enough players');
